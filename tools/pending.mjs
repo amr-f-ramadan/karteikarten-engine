@@ -35,7 +35,7 @@ const SCHEMA = { type: "OBJECT",
   properties: Object.fromEntries(FIELDS.map(f => [f, f === "g" ? { type: "STRING", enum: ["der", "die", "das", "pl", "x"] } : { type: "STRING" }])),
   required: FIELDS.filter(f => f !== "perf" && f !== "note") };
 async function gen(word) {
-  for (const m of ["gemini-flash-lite-latest", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-2.5-flash"]) {
+  for (const m of ["gemini-flash-lite-latest", "gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-3.8-flash"]) {
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, {
       method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify({ contents: [{ parts: [{ text: PROMPT(word) }] }], generationConfig: { responseMimeType: "application/json", responseSchema: SCHEMA, temperature: 0.4 } })

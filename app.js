@@ -211,7 +211,7 @@
   const GK = C.key + ":gemini";
   let gkey = ""; try { gkey = localStorage.getItem(GK) || ""; } catch (e) {}
   let add = { word: "", busy: false, card: null, msg: "" };
-  const MODELS = ["gemini-flash-lite-latest", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-2.5-flash"];
+  const MODELS = ["gemini-flash-lite-latest", "gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-3.8-flash"];
   const famKey = c => c.fam || c.w.toLowerCase();
   const plainDe = t => String(t || "").toLowerCase().replace(/ä/g, "a").replace(/ö/g, "o").replace(/ü/g, "u").replace(/ß/g, "ss");
   const sameStem = (w, fam) => { const st = plainDe(fam).replace(/(end|ern|eln|en|n|e)$/, ""); return st.length >= 3 && plainDe(w).includes(st); };
