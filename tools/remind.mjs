@@ -24,7 +24,8 @@ const at = `${pad(Math.floor(target / 60))}:${pad(target % 60)}`;
 // Uhrzeit wartet und sendet pünktlich; ein späterer Lauf holt die Erinnerung am selben Tag nach.
 const WAIT = 20;
 if (!force) {
-  if (sent && sent.d === today) { console.log("Heute schon gesendet."); process.exit(0); }
+  // Einmal pro Tag und Uhrzeit: wird die Uhrzeit geändert, gilt die neue noch am selben Tag.
+  if (sent && sent.d === today && (sent.at === undefined || sent.at === at)) { console.log("Heute schon gesendet."); process.exit(0); }
   const ahead = target - nowMin;
   if (ahead > WAIT) { console.log(`Jetzt ${pad(Math.floor(nowMin / 60))}:${pad(nowMin % 60)}, Erinnerung um ${at}.`); process.exit(0); }
   if (ahead > 0) {
@@ -70,6 +71,6 @@ if (!force && process.env.GITHUB_TOKEN && process.env.GITHUB_REPOSITORY) {
   const h = { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, Accept: "application/vnd.github+json" };
   const g = await fetch(url + "?ref=progress", { headers: h });
   const shaOld = g.ok ? (await g.json()).sha : undefined;
-  const r = await fetch(url, { method: "PUT", headers: h, body: JSON.stringify({ message: "Erinnerung gesendet", branch: "progress", sha: shaOld, content: Buffer.from(JSON.stringify({ d: today })).toString("base64") }) });
+  const r = await fetch(url, { method: "PUT", headers: h, body: JSON.stringify({ message: "Erinnerung gesendet", branch: "progress", sha: shaOld, content: Buffer.from(JSON.stringify({ d: today, at })).toString("base64") }) });
   console.log("sent.json:", r.status);
 }
