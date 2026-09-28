@@ -320,7 +320,11 @@
     if (!gkey) { add.msg = T("needKey"); render(); return; }
     if (exists(add.word)) { add.msg = T("dup"); render(); return; }
     add.busy = "gen"; add.msg = ""; render();
-    try { add.card = await genCard(add.word); }
+    try {
+      add.card = await genCard(add.word);
+      // Eingabe auf Arabisch oder Englisch: erst jetzt steht das deutsche Wort fest
+      if (exists(add.card.w)) { add.msg = T("dup"); add.card = null; add.word = ""; }
+    }
     catch (e) {
       const m = e.message;
       if (m === "key") add.msg = T("keyBad");

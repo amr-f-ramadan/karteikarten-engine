@@ -280,6 +280,14 @@ const toastOf = async (page, action) => {
     gh.store["main:cards.js"].content = newSrc;
     await grab(page, "list-after-save");
 
+    // Arabic input that Gemini turns into a German word she already has -> "already in the list", no preview
+    gem.card = { w: "Fläche", g: "die", hint: "die Fläche, -n", ar: "مساحة", ex: "Die <b>Fläche</b> ist groß.", tr: "المساحة كبيرة.", note: "", fam: "fläche", cat: "الوصف والمقاسات" };
+    await page.fill("#nw", "مساحة"); await page.click('[data-act="gen"]');
+    await page.waitForFunction(() => { const m = document.querySelector(".addmsg"); return m && m.textContent; }, null, { timeout: 8000 });
+    const dupMsg = await page.textContent(".addmsg"), dupPreview = !!(await page.$(".preview"));
+    check("Eman: Arabic input translated to an existing German word is reported as duplicate", dupMsg === "الكلمة دي موجودة في القايمة خلاص." && !dupPreview, { dupMsg, dupPreview });
+    const lastPrompt = gem.calls[gem.calls.length - 1].body.contents[0].parts[0].text;
+    check("Eman: prompt tells Gemini to translate Arabic/English input to German", lastPrompt.includes('Wort oder Ausdruck: "مساحة"') && lastPrompt.includes("Ist die Eingabe Arabisch oder Englisch"), lastPrompt.slice(0, 300));
     // Gemini unavailable -> waitlist
     gem.mode = "busy";
     await page.fill("#nw", "die Miete"); await page.click('[data-act="gen"]');
