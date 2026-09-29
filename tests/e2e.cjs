@@ -327,6 +327,11 @@ const toastOf = async (page, action) => {
     check("Eman: practice shows the task in Arabic and two target words", prWords === 2 && (await page.textContent(".prtask")) === "قولي لصاحب الشقة إن الإيجار غالي عليكي.", prWords);
     await grab(page, "practice-task");
     await page.fill("#pa", "Die Miete ist zu hoch");
+    const callsBefore = gem.calls.length;
+    await page.goto(`${ORIGIN}/eman-deutsch/`); await sleep(1500);
+    await tab(page, "practice");
+    const kept = await page.evaluate(() => ({ task: document.querySelector(".prtask") && document.querySelector(".prtask").textContent, answer: document.querySelector("#pa") && document.querySelector("#pa").value, words: document.querySelectorAll(".card.pr .famchip").length }));
+    check("Eman: an unfinished exercise survives closing the app (task, words, typed answer)", kept.task === "قولي لصاحب الشقة إن الإيجار غالي عليكي." && kept.answer === "Die Miete ist zu hoch" && kept.words === 2 && gem.calls.length === callsBefore, kept);
     await page.click('[data-act="prcheck"]');
     await page.waitForSelector(".prfb", { timeout: 8000 });
     const fbPrompt = gem.calls[gem.calls.length - 1].body.contents[0].parts[0].text;

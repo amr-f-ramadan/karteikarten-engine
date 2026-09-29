@@ -477,6 +477,11 @@
 
   /* ---------- Sprechen üben: Gemini gibt eine Situation, prüft die Antwort (Texte und Regeln aus C.practice) ---------- */
   let pr = { words: [], task: "", starter: "", answer: "", fb: null, busy: false, msg: "" };
+  const PRK = C.key + ":practice";
+  try { const o = JSON.parse(localStorage.getItem(PRK) || "null"); if (o && o.task && Array.isArray(o.words)) pr = Object.assign(pr, o); } catch (e) {}
+  function prSave() {
+    try { if (pr.task) localStorage.setItem(PRK, JSON.stringify({ words: pr.words, task: pr.task, starter: pr.starter, answer: pr.answer, fb: pr.fb })); else localStorage.removeItem(PRK); } catch (e) {}
+  }
   const PR_TASK = { type: "OBJECT", properties: { task: { type: "STRING" }, starter: { type: "STRING" } }, required: ["task", "starter"] };
   const LIST = { type: "ARRAY", items: { type: "STRING" } };
   const PR_FB = { type: "OBJECT", properties: { correct: { type: "BOOLEAN" }, corrected: { type: "STRING" }, natural: { type: "STRING" }, tips: LIST, used: LIST, chunks: LIST },
@@ -497,7 +502,7 @@
     pr = { words: pickWords(), task: "", starter: "", answer: "", fb: null, busy: "task", msg: "" }; render();
     try { const t = await gemini(fill(C.practice.task, { words: wordList(pr.words), topic: pr.words[0].cat || "" }), PR_TASK, o => o.task); pr.task = t.task; pr.starter = t.starter || ""; }
     catch (e) { pr.msg = prError(e); }
-    pr.busy = false; render();
+    pr.busy = false; prSave(); render();
   }
   async function prCheck() {
     const el = $("#pa"); if (el) pr.answer = el.value.trim();
@@ -505,7 +510,7 @@
     pr.busy = "check"; pr.msg = ""; render();
     try { pr.fb = await gemini(fill(C.practice.feedback, { words: wordList(pr.words), task: pr.task, answer: pr.answer }), PR_FB, o => o.natural); }
     catch (e) { pr.msg = prError(e); }
-    pr.busy = false; render();
+    pr.busy = false; prSave(); render();
   }
   function renderPractice() {
     const intro = `<p class="meta">${T("prIntro")}</p>`, msg = pr.msg ? `<p class="addmsg">${esc(pr.msg)}</p>` : "";
@@ -724,7 +729,7 @@
     else if (e.target.id === "slw") setOpt("slow", e.target.checked);
     else if (e.target.id === "pda") setOpt("prodAuto", e.target.checked);
   });
-  document.addEventListener("input", e => { if (e.target.id === "q") { query = e.target.value; applyFilter(); } else if (e.target.id === "pa") pr.answer = e.target.value; });
+  document.addEventListener("input", e => { if (e.target.id === "q") { query = e.target.value; applyFilter(); } else if (e.target.id === "pa") { pr.answer = e.target.value; prSave(); } });
   document.addEventListener("keydown", e => {
     if (e.target.id === "nw" && e.key === "Enter") { e.preventDefault(); doGen(); return; }
     if (mode !== "learn" || !cur || /INPUT|TEXTAREA/.test(e.target.tagName)) return;
