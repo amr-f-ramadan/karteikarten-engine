@@ -228,12 +228,12 @@
   const SCHEMA = { type: "OBJECT",
     properties: Object.fromEntries(FIELDS.map(f => [f, f === "g" ? { type: "STRING", enum: ["der", "die", "das", "pl", "x"] } : { type: "STRING" }])),
     required: FIELDS.filter(f => f !== "perf" && f !== "note") };
-  async function genCard(word) {
+  async function gemini(prompt, schema, ok) {
     let last = "";
     for (const m of MODELS) {
       const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + m + ":generateContent", {
         method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": gkey },
-        body: JSON.stringify({ contents: [{ parts: [{ text: PROMPT(word) }] }], generationConfig: { responseMimeType: "application/json", responseSchema: SCHEMA, temperature: 0.4 } })
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", responseSchema: schema, temperature: 0.4 } })
       });
       if (r.status === 404) { last = last || "404"; continue; }
       if (r.status >= 500) { last = last === "quota" ? "quota" : "busy"; await new Promise(res => setTimeout(res, 800)); continue; }
@@ -242,12 +242,13 @@
       if (!r.ok) throw new Error(String(r.status));
       const j = await r.json();
       const txt = (((j.candidates || [])[0] || {}).content || {}).parts;
-      const card = JSON.parse(txt.map(p => p.text || "").join(""));
-      if (!card.w) throw new Error("leer");
-      return card;
+      const out = JSON.parse(txt.map(p => p.text || "").join(""));
+      if (!ok(out)) throw new Error("leer");
+      return out;
     }
     throw new Error(last || "model");
   }
+  const genCard = word => gemini(PROMPT(word), SCHEMA, c => c.w);
   const slug = w => w.toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss").replace(/[^a-z0-9]/g, "").slice(0, 30) || "wort";
   const exists = w => { const k = w.toLowerCase().replace(/^(der|die|das)\s+/, "").trim(); return CARDS.some(c => c.w.toLowerCase() === k); };
   async function saveCard(card) {
@@ -474,6 +475,62 @@
   }
   function badge(n) { try { if (navigator.setAppBadge) (n ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {}); } catch (e) {} }
 
+  /* ---------- Sprechen üben: Gemini gibt eine Situation, prüft die Antwort (Texte und Regeln aus C.practice) ---------- */
+  let pr = { words: [], task: "", starter: "", answer: "", fb: null, busy: false, msg: "" };
+  const PR_TASK = { type: "OBJECT", properties: { task: { type: "STRING" }, starter: { type: "STRING" } }, required: ["task", "starter"] };
+  const LIST = { type: "ARRAY", items: { type: "STRING" } };
+  const PR_FB = { type: "OBJECT", properties: { correct: { type: "BOOLEAN" }, corrected: { type: "STRING" }, natural: { type: "STRING" }, tips: LIST, used: LIST, chunks: LIST },
+    required: ["correct", "corrected", "natural", "tips", "used", "chunks"] };
+  const fill = (tpl, v) => tpl.replace(/\{(\w+)\}/g, (m, k) => (v[k] !== undefined ? v[k] : m));
+  const pickOne = a => a[Math.floor(Math.random() * a.length)];
+  function pickWords() {
+    const seen = CARDS.filter(c => P.cards[c.id]), known = seen.filter(c => P.cards[c.id].b >= 1);
+    const pool = known.length >= 2 ? known : seen.length >= 2 ? seen : CARDS;
+    const a = pickOne(pool), same = pool.filter(c => c !== a && c.cat && c.cat === a.cat), rest = pool.filter(c => c !== a);
+    return rest.length ? [a, pickOne(same.length ? same : rest)] : [a];
+  }
+  const wordList = ws => ws.map(fullWord).join(", ");
+  const prError = e => (e.message === "key" ? T("keyBad") : T("prFail"));
+  async function prNew() {
+    if (pr.busy) return;
+    if (!gkey) { pr.msg = T("needKey"); render(); return; }
+    pr = { words: pickWords(), task: "", starter: "", answer: "", fb: null, busy: "task", msg: "" }; render();
+    try { const t = await gemini(fill(C.practice.task, { words: wordList(pr.words), topic: pr.words[0].cat || "" }), PR_TASK, o => o.task); pr.task = t.task; pr.starter = t.starter || ""; }
+    catch (e) { pr.msg = prError(e); }
+    pr.busy = false; render();
+  }
+  async function prCheck() {
+    const el = $("#pa"); if (el) pr.answer = el.value.trim();
+    if (!pr.answer || pr.busy) return;
+    pr.busy = "check"; pr.msg = ""; render();
+    try { pr.fb = await gemini(fill(C.practice.feedback, { words: wordList(pr.words), task: pr.task, answer: pr.answer }), PR_FB, o => o.natural); }
+    catch (e) { pr.msg = prError(e); }
+    pr.busy = false; render();
+  }
+  function renderPractice() {
+    const intro = `<p class="meta">${T("prIntro")}</p>`, msg = pr.msg ? `<p class="addmsg">${esc(pr.msg)}</p>` : "";
+    if (!pr.task) return `${intro}<div class="card pr">${msg}<button class="btn ok wide" data-act="prnew" ${pr.busy ? "disabled" : ""}>${pr.busy ? T("prBusy") : T("prStart")}</button></div>`;
+    const chip = c => `<button class="famchip de ${gClass(c)}" data-act="sayt" data-t="${esc(fullWord(c))}">${ART[c.g] ? `<span class="art">${ART[c.g]}</span> ` : ""}${esc(c.w)}</button>`;
+    const f = pr.fb, used = f ? (f.used || []).map(norm) : [];
+    const isUsed = c => used.some(u => u && (u.includes(norm(c.w)) || norm(c.w).includes(u)));
+    return `${intro}<div class="card pr">
+      <p class="prh">${T("prWords")}</p><div class="famrow">${pr.words.map(chip).join("")}</div>
+      <p class="prtask" dir="auto">${esc(pr.task)}</p>
+      ${pr.starter ? `<p class="hint de">${esc(pr.starter)} …</p>` : ""}
+      <textarea id="pa" class="prin" rows="3" dir="auto" autocapitalize="sentences" placeholder="${esc(T("prPh"))}" ${f ? "readonly" : ""}>${esc(pr.answer)}</textarea>
+      ${msg}
+      ${f ? `<div class="prfb">
+        <p class="prh">${f.correct ? T("prGood") : T("prCorrected")}</p><p class="de prde">${esc(f.corrected)}</p>
+        <p class="prh">${T("prNatural")}</p><div class="exrow"><p class="ex de">${esc(f.natural)}</p>${speakBtn("", T("sayEx")).replace('data-say=""', `data-t="${esc(f.natural)}"`)}</div>
+        ${(f.tips || []).length ? `<p class="prh">${T("prTips")}</p><ul class="prtips">${f.tips.map(t => `<li dir="auto">${esc(t)}</li>`).join("")}</ul>` : ""}
+        <p class="prh">${T("prUsed")}</p><p class="prused de">${pr.words.map(c => `<span class="${isUsed(c) ? "yes" : "no"}">${isUsed(c) ? "✓" : "✗"} ${esc(fullWord(c))}</span>`).join(" ")}</p>
+        ${(f.chunks || []).length ? `<p class="prh">${T("prChunks")}</p><div class="wait">${f.chunks.map(t => `<span class="chip de">${esc(t)}<button data-act="pradd" data-t="${esc(t)}" aria-label="${esc(T("prAdd"))}">+</button></span>`).join("")}</div>` : ""}
+      </div>
+      <button class="btn ok wide" data-act="prnew">${T("prNext")}</button>`
+      : `<button class="btn ok wide" data-act="prcheck" ${pr.busy ? "disabled" : ""}>${pr.busy ? T("prBusy") : T("prCheck")}</button>`}
+    </div>`;
+  }
+
   /* ---------- Oberfläche ---------- */
   let mode = "learn", listOpen = null;
   function flash(msg) { const el = $("#toast"); el.textContent = msg; el.hidden = false; clearTimeout(el._t); el._t = setTimeout(() => (el.hidden = true), 2600); }
@@ -493,9 +550,10 @@
       return `<div class="done"><p class="big">${T("doneTitle")}</p><p>${T("doneText").replace("{n}", tomorrow)}</p>
         <button class="btn" data-act="more">${T("moreNew")}</button></div>`;
     }
-    const c = cur, s = P.cards[c.id], arFirst = opt("arFirst", false);
+    const c = cur, s = P.cards[c.id], always = opt("arFirst", false);
+    const arFirst = always || (opt("prodAuto", true) && !!s && s.b >= 2);
     const front = arFirst
-      ? `<p class="ar-big">${esc(c.ar)}</p><p class="hint">${T("whatDe")}</p>`
+      ? `<p class="ar-big">${esc(c.ar)}</p><p class="hint">${T(always ? "whatDe" : "sayDe")}</p>${calm() ? "" : '<div class="timer"></div>'}`
       : `${wordHTML(c)}${c.hint ? `<p class="hint de">${esc(c.hint)}</p>` : ""}`;
     const back = `
       ${arFirst ? wordHTML(c) + (c.hint ? `<p class="hint de">${esc(c.hint)}</p>` : "") : ""}
@@ -602,6 +660,7 @@
       <label class="btn filebtn">${T("import")}<input id="imp" type="file" accept="application/json,.json"></label></div>
       <h2>${T("optsH")}</h2>
       <label class="fld inline">${T("newPerDay")} <input id="npd" type="number" min="0" max="50" value="${opt("newPerDay", C.newPerDay || 10)}"></label>
+      <label class="chk"><input id="pda" type="checkbox" ${opt("prodAuto", true) ? "checked" : ""}> ${T("prodAuto")}</label>
       <label class="chk"><input id="arf" type="checkbox" ${opt("arFirst", false) ? "checked" : ""}> ${T("arFirst")}</label>
       <label class="chk"><input id="slw" type="checkbox" ${opt("slow", false) ? "checked" : ""}> ${T("slow")}</label>
       <h2>${T("resetH")}</h2>
@@ -614,7 +673,7 @@
     const dueN = dueCards().length + freshCards().length;
     const bd = $("#badge"); if (bd) { bd.textContent = dueN; bd.hidden = !dueN; }
     badge(dueN);
-    $("#main").innerHTML = mode === "learn" ? renderLearn() : mode === "quiz" ? renderQuiz() : mode === "list" ? renderList() : renderSettings();
+    $("#main").innerHTML = mode === "learn" ? renderLearn() : mode === "quiz" ? renderQuiz() : mode === "list" ? renderList() : mode === "practice" ? renderPractice() : renderSettings();
     if (mode === "list" && query) applyFilter();
     setStatus(status);
   }
@@ -623,6 +682,7 @@
     const nb = e.target.closest("nav button");
     if (nb) { mode = nb.dataset.mode; if (mode === "quiz" && !quiz) pickQuiz(); render(); window.scrollTo(0, 0); return; }
     const say = e.target.closest(".say");
+    if (say && say.dataset.t) { e.stopPropagation(); speak(say.dataset.t); return; }
     if (say) { e.stopPropagation(); const c = mode === "quiz" ? quiz && quiz.c : cur; if (c) speak(say.dataset.say === "ex" ? c.ex : fullWord(c)); return; }
     const el = e.target.closest("[data-act]"); if (!el) return;
     const act = el.dataset.act;
@@ -652,6 +712,9 @@
     else if (act === "discard") { add = { word: "", busy: false, card: null, msg: "" }; render(); }
     else if (act === "savegem") { const v = ($("#gem").value || "").trim(); if (!v) return; gkey = v; try { localStorage.setItem(GK, v); } catch (x) {} flash(T("gemSet")); render(); }
     else if (act === "delgem") { gkey = ""; try { localStorage.removeItem(GK); } catch (x) {} render(); }
+    else if (act === "prnew") prNew();
+    else if (act === "prcheck") prCheck();
+    else if (act === "pradd") { queueWord(el.dataset.t); flash(T("prAdded")); el.disabled = true; setTimeout(workQueue, 500); }
     else if (act === "reset") { if (confirm(T("resetQ"))) { P = Object.assign(emptyP(), { opts: P.opts }); changed(); buildQueue(); next(); } }
   });
   document.addEventListener("change", e => {
@@ -659,8 +722,9 @@
     else if (e.target.id === "npd") { setOpt("newPerDay", Math.max(0, Math.min(50, parseInt(e.target.value, 10) || 0))); if (!cur) { buildQueue(); cur = queue.shift() || null; } }
     else if (e.target.id === "arf") setOpt("arFirst", e.target.checked);
     else if (e.target.id === "slw") setOpt("slow", e.target.checked);
+    else if (e.target.id === "pda") setOpt("prodAuto", e.target.checked);
   });
-  document.addEventListener("input", e => { if (e.target.id === "q") { query = e.target.value; applyFilter(); } });
+  document.addEventListener("input", e => { if (e.target.id === "q") { query = e.target.value; applyFilter(); } else if (e.target.id === "pa") pr.answer = e.target.value; });
   document.addEventListener("keydown", e => {
     if (e.target.id === "nw" && e.key === "Enter") { e.preventDefault(); doGen(); return; }
     if (mode !== "learn" || !cur || /INPUT|TEXTAREA/.test(e.target.tagName)) return;

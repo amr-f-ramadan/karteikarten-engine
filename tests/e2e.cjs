@@ -84,7 +84,8 @@ function makeGemini() {
     const req = route.request();
     g.calls.push({ url: req.url(), body: JSON.parse(req.postData()) });
     if (g.mode === "busy") return route.fulfill({ status: 503, contentType: "application/json", body: "{}" });
-    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(g.card) }] } }] }) });
+    const out = typeof g.card === "function" ? g.card(g.calls[g.calls.length - 1].body) : g.card;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(out) }] } }] }) });
   };
   return g;
 }
@@ -311,6 +312,33 @@ const toastOf = async (page, action) => {
     check("Eman: delete shows Arabic toast", delToast === "اتمسحت", delToast);
     check("Eman: after delete, cards.js equals her file byte for byte (tr/cat/fam kept)", afterDel === emanCards, afterDel.length + " vs " + emanCards.length);
 
+    // Speaking practice: Gemini gives a situation, checks the answer, phrases can become cards
+    gem.mode = "ok";
+    gem.card = body => body.contents[0].parts[0].text.includes("Antwort der Schülerin")
+      ? { correct: false, corrected: "Die Miete ist zu hoch.", natural: "Die Miete ist mir wirklich zu hoch.", tips: ["خدي بالك: Miete اسم مؤنث"], used: ["hoch"], chunks: ["mir wirklich zu hoch"] }
+      : { task: "قولي لصاحب الشقة إن الإيجار غالي عليكي.", starter: "Entschuldigung, aber" };
+    await tab(page, "practice");
+    await grab(page, "practice-start");
+    await page.click('[data-act="prnew"]');
+    await page.waitForSelector("#pa", { timeout: 8000 });
+    const taskReq = gem.calls[gem.calls.length - 1].body, taskPrompt = taskReq.contents[0].parts[0].text;
+    check("Eman: practice task asks Gemini in her style with two of her words", /Ägyptisch-Arabisch/.test(taskPrompt) && /Thema: [^\n]*[؀-ۿ]/.test(taskPrompt) && JSON.stringify(Object.keys(taskReq.generationConfig.responseSchema.properties)) === '["task","starter"]', taskPrompt.slice(0, 400));
+    const prWords = await page.$$eval(".card.pr .famchip", els => els.length);
+    check("Eman: practice shows the task in Arabic and two target words", prWords === 2 && (await page.textContent(".prtask")) === "قولي لصاحب الشقة إن الإيجار غالي عليكي.", prWords);
+    await grab(page, "practice-task");
+    await page.fill("#pa", "Die Miete ist zu hoch");
+    await page.click('[data-act="prcheck"]');
+    await page.waitForSelector(".prfb", { timeout: 8000 });
+    const fbPrompt = gem.calls[gem.calls.length - 1].body.contents[0].parts[0].text;
+    check("Eman: her answer is sent for feedback", fbPrompt.includes('"Die Miete ist zu hoch"') && fbPrompt.includes("قولي لصاحب الشقة"), fbPrompt.slice(0, 300));
+    const fbView = await page.evaluate(() => ({ nat: document.querySelector(".prfb .ex").textContent, tips: document.querySelectorAll(".prtips li").length, chunks: document.querySelectorAll('.prfb [data-act="pradd"]').length, say: !!document.querySelector('.prfb .say[data-t]') }));
+    check("Eman: feedback shows natural version with play button, tip and phrase", fbView.nat === "Die Miete ist mir wirklich zu hoch." && fbView.tips === 1 && fbView.chunks === 1 && fbView.say, fbView);
+    await page.screenshot({ path: SHOTS + "/light-9-practice.png", fullPage: true });
+    await grab(page, "practice-feedback");
+    await page.click('[data-act="pradd"]');
+    const prPend = JSON.parse(await page.evaluate(() => localStorage.getItem("kk-eman-v2"))).pending;
+    check("Eman: + puts the phrase on the waitlist", prPend && prPend["mir wirklich zu hoch"], prPend);
+
     // Quiz
     await tab(page, "quiz");
     await grab(page, "quiz-question");
@@ -350,6 +378,18 @@ const toastOf = async (page, action) => {
     await ctx.close();
   }
 
+  // A known card (box 2) is shown meaning first, to be said in German, with the 5 second bar
+  {
+    const prog = { v: 1, cards: { stabil: { b: 2, due: 1, t: 1, n: 2, w: 0 } }, art: {}, pending: {}, newDay: { d: new Date().toISOString().slice(0, 10), n: 99 }, opts: {}, updated: 1 };
+    const { ctx, page } = await newPage(browser, { storage: { "kk-eman-v2": JSON.stringify(prog) } });
+    await page.goto(`${ORIGIN}/eman-deutsch/`); await sleep(800);
+    const front = await page.evaluate(() => ({ ar: (document.querySelector("#card .ar-big") || {}).textContent, timer: !!document.querySelector("#card .timer"), hint: (document.querySelector("#card .hint") || {}).textContent }));
+    check("Eman: known card shows meaning first, asks for a German sentence, with timer", front.ar === "متين / ثابت" && front.timer && front.hint === "قوليها بالألماني في جملة كاملة", front);
+    await grab(page, "learn-production");
+    await page.screenshot({ path: SHOTS + "/light-10-production.png" });
+    await ctx.close();
+  }
+
   // Old key migration still works (wohnen-cards-v1 -> kk-eman-v2)
   {
     const { ctx, page } = await newPage(browser, { storage: { "wohnen-cards-v1": JSON.stringify({ known: ["stabil", "eng"] }) } });
@@ -385,6 +425,8 @@ const toastOf = async (page, action) => {
   const addWords = s => String(s || "").replace(/<[^>]+>/g, " ").split(/[^A-Za-zÄÖÜäöüß]+/).forEach(w => w && allowed.add(w));
   loadCards(emanCards).concat([{ w: "umziehen", hint: "zieht um, zog um, ist umgezogen", ex: "Wir ziehen nächsten Monat um", fam: "ziehen" }, { w: "die Miete" }]).forEach(c => Object.values(c).forEach(addWords));
   ["der", "die", "das", "GitHub", "Gemini", "token", "key", "API", "Google", "AI", "Studio", "Contents", "Read", "and", "write", "Fine", "grained", "repo", "github", "pat", "AIza", "umziehen", "Miete", "ICE"].forEach(w => allowed.add(w));
+  // German sentences in the practice mock are content, not UI
+  ["Die Miete ist mir wirklich zu hoch", "Die Miete ist zu hoch", "Entschuldigung, aber"].forEach(addWords);
   const cardWords = loadCards(emanCards).map(c => c.w).sort((a, b) => b.length - a.length);
   const leaks = [];
   for (const [state, text] of allUiText) {

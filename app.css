@@ -104,13 +104,27 @@ button:focus-visible,.btn:focus-within,.card:focus-visible{outline:3px solid var
 .done p{color:var(--muted)}
 
 /* Schwebende Tab-Leiste */
-nav{position:fixed;left:0;right:0;margin:0 auto;bottom:max(10px,calc(env(safe-area-inset-bottom,0px) - 14px));width:min(94%,520px);border-radius:28px;display:grid;grid-template-columns:repeat(4,1fr);padding:6px;z-index:5}
+nav{position:fixed;left:0;right:0;margin:0 auto;bottom:max(10px,calc(env(safe-area-inset-bottom,0px) - 14px));width:min(94%,520px);border-radius:28px;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;padding:6px;z-index:5}
 nav button{all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0 7px;border-radius:22px;font-size:.68rem;font-weight:600;color:var(--muted);position:relative;transition:background .2s,color .2s}
 nav button[aria-current=page]{color:var(--accent);background:var(--glass-strong)}
 nav button:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
 #badge{position:absolute;top:2px;inset-inline-start:calc(50% + 6px);background:var(--again);color:#fff;border-radius:999px;font-size:.62rem;padding:0 6px;line-height:1.5;font-weight:700}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + max(10px,calc(env(safe-area-inset-bottom,0px) - 14px)));color:var(--ink);padding:11px 16px;border-radius:16px;font-size:.9rem;z-index:6;max-width:90%}
 @media (prefers-reduced-motion:reduce){.btn{transition:none}}
+
+/* Sprechen: Zeitbalken beim Abrufen, Übungen mit Gemini */
+.timer{align-self:stretch;height:4px;margin-top:10px;border-radius:2px;background:var(--accent);opacity:.7;animation:shrink 5s linear forwards}
+@keyframes shrink{from{width:100%}to{width:0}}
+.card.pr{min-height:0;cursor:default;padding:22px 18px;gap:10px}
+.prh{margin:6px 0 0;font-size:.8rem;font-weight:600;color:var(--muted)}
+.prtask{margin:4px 0 0;font-size:1.1rem;line-height:1.6}
+.prin{font:inherit;font-family:var(--de);width:100%;padding:12px 14px;border-radius:14px;color:var(--ink);outline:none;resize:vertical;background:var(--glass);border:1px solid var(--rim)}
+.prfb{display:flex;flex-direction:column;gap:6px}
+.prde{margin:0;font-size:1.05rem}
+.prtips{margin:0;padding-inline-start:20px;color:var(--muted);font-size:.92rem}
+.prused{margin:0;display:flex;flex-wrap:wrap;gap:10px}
+.prused .yes{color:var(--ok)}.prused .no{color:var(--again)}
+@media (prefers-reduced-motion:reduce){.timer{animation:none}}
 
 /* Neues Wort */
 .add{border-radius:24px;padding:14px;margin-bottom:16px}
