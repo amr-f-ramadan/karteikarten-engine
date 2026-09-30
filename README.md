@@ -11,7 +11,7 @@ The engine holds no personal data or settings: no texts, word lists, progress, c
 
 ## What is here
 
-- `app.js`: learning (Leitner boxes), article quiz, pronunciation, GitHub sync, backup, new words with Gemini, waitlist, word families, topics, search, reminders
+- `app.js`: learning (Leitner boxes), article quiz, pronunciation, GitHub sync, backup, new words with Gemini, waitlist, word families, topics, search, reminders, speaking practice, phrases
 - `app.css`: glass design; colours, fonts and orb colours come from each app's `index.html`
 - `tools/remind.mjs`: daily reminder, run by each app's workflow from the app's folder
 - `tools/pending.mjs`: creates cards for the waitlist on GitHub (not scheduled)
@@ -19,7 +19,11 @@ The engine holds no personal data or settings: no texts, word lists, progress, c
 
 ## What stays in each app
 
-`index.html` (`window.APP`: repo, storage key, all UI texts in `t`, card `fields`, Gemini `rules` including `intro` and `end`, reminder texts in `remind`, push key `vapid`; colours, fonts, icon), `cards.js`, `manifest.json`, `sw.js` (browsers require it in the app's own folder), the reminder workflow, and the progress on the app's `progress` branch.
+`index.html` (`window.APP`: repo, storage key, all UI texts in `t`, card `fields`, Gemini `rules` including `intro` and `end`, reminder texts in `remind`, push key `vapid`, speaking prompts in `practice`, and optionally `phrases` (fields, Gemini rules, starter-set prompt, new phrases per day); colours, fonts, icon), `cards.js`, `manifest.json`, `sw.js` (browsers require it in the app's own folder), the reminder workflow, and the progress on the app's `progress` branch.
+
+## Phrases
+
+With `window.APP.phrases` set, the list tab switches between words and phrases (openers, fillers, set phrases). Phrases are ordinary entries in `cards.js` with `"k":"p"` and `"g":"x"`, grouped by `cat` (what they are for). They are reviewed in the learning tab with their own daily limit for new ones (`newDay.p` in the progress), are left out of the article quiz, word families and practice words, and the + in speaking practice saves to them. Without `phrases` the app behaves as before.
 
 ## Before changing the engine
 

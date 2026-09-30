@@ -9,6 +9,11 @@
   const DAY = 864e5, INT = [0, 1, 3, 7, 14, 30, 60];
   const $ = s => document.querySelector(s);
   const byId = Object.fromEntries(CARDS.map(c => [c.id, c]));
+  /* Wendungen (Redemittel, Satzanfänge, Füllwörter) sind Karten mit k: "p"; eingeschaltet durch window.APP.phrases */
+  const PH = C.phrases || null;
+  const isP = c => c.k === "p";
+  const WORDS = () => CARDS.filter(c => !isP(c));
+  const nounList = () => CARDS.filter(c => !isP(c) && (c.g === "der" || c.g === "die" || c.g === "das"));
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const today = () => new Date().toISOString().slice(0, 10);
   const startOfDay = ts => { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); };
@@ -35,6 +40,7 @@
     }
     const na = a.newDay || { d: "", n: 0 }, nb = b.newDay || { d: "", n: 0 };
     o.newDay = na.d === nb.d ? { d: na.d, n: Math.max(na.n, nb.n) } : (na.d > nb.d ? na : nb);
+    if (na.d === nb.d && (na.p || nb.p)) o.newDay.p = Math.max(na.p || 0, nb.p || 0);
     o.opts = (a.updated || 0) >= (b.updated || 0) ? Object.assign({}, b.opts, a.opts) : Object.assign({}, a.opts, b.opts);
     o.updated = Math.max(a.updated || 0, b.updated || 0);
     return o;
@@ -43,14 +49,17 @@
   function setOpt(k, v) { P.opts = P.opts || {}; P.opts[k] = v; changed(); }
 
   /* ---------- Wiederholung ---------- */
-  function newToday() { return P.newDay && P.newDay.d === today() ? P.newDay.n : 0; }
+  function newToday(kind) { return P.newDay && P.newDay.d === today() ? (kind === "p" ? P.newDay.p || 0 : P.newDay.n) : 0; }
   function dueCards() {
     const now = Date.now();
     return CARDS.filter(c => P.cards[c.id] && P.cards[c.id].due <= now).sort((a, b) => P.cards[a.id].due - P.cards[b.id].due);
   }
   function freshCards() {
     const left = Math.max(0, opt("newPerDay", C.newPerDay || 10) - newToday());
-    return CARDS.filter(c => !P.cards[c.id]).slice(0, left);
+    const words = CARDS.filter(c => !P.cards[c.id] && !isP(c)).slice(0, left);
+    if (!PH) return words;
+    const leftP = Math.max(0, opt("newPhrases", PH.perDay || 3) - newToday("p"));
+    return words.concat(CARDS.filter(c => !P.cards[c.id] && isP(c)).slice(0, leftP));
   }
   let queue = [], cur = null, flipped = false;
   function buildQueue() { queue = shuffle(dueCards()).concat(freshCards()); }
@@ -60,7 +69,7 @@
     if (!s) {
       s = P.cards[c.id] = { b: 0, due: now, t: now, n: 0, w: 0 };
       if (!P.newDay || P.newDay.d !== today()) P.newDay = { d: today(), n: 0 };
-      P.newDay.n++;
+      if (isP(c)) P.newDay.p = (P.newDay.p || 0) + 1; else P.newDay.n++;
     }
     s.n++; s.t = now;
     if (ok) { s.b = Math.min(s.b + 1, INT.length - 1); s.due = startOfDay(now) + INT[s.b] * DAY; }
@@ -69,6 +78,12 @@
     next();
   }
   function next() { cur = queue.shift() || null; flipped = false; render(); }
+  // Neu gespeicherte Karten gleich lernen, soweit das Tageslimit reicht
+  function refill() {
+    const inQ = new Set(queue.map(c => c.id).concat(cur ? [cur.id] : []));
+    freshCards().filter(c => !inQ.has(c.id)).forEach(c => queue.push(c));
+    if (!cur) { cur = queue.shift() || null; flipped = false; }
+  }
   let turning = false;
   const calm = () => window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
   function flip() {
@@ -85,7 +100,7 @@
   }
 
   /* ---------- Artikel-Quiz ---------- */
-  let nouns = CARDS.filter(c => c.g === "der" || c.g === "die" || c.g === "das");
+  let nouns = nounList();
   let quiz = null;
   function pickQuiz() {
     if (!nouns.length) { quiz = null; return; }
@@ -216,9 +231,9 @@
   const plainDe = t => String(t || "").toLowerCase().replace(/ä/g, "a").replace(/ö/g, "o").replace(/ü/g, "u").replace(/ß/g, "ss");
   const sameStem = (w, fam) => { const st = plainDe(fam).replace(/(end|ern|eln|en|n|e)$/, ""); return st.length >= 3 && plainDe(w).includes(st); };
   const topicOf = list => { const n = {}; list.forEach(x => { if (x.cat) n[x.cat] = (n[x.cat] || 0) + 1; }); let best = null; for (const x of list) if (x.cat && (!best || n[x.cat] > n[best])) best = x.cat; return best; };
-  const relatives = c => CARDS.filter(x => x !== c && famKey(x) === famKey(c));
-  const famList = () => [...new Set(CARDS.map(famKey))].join(", ");
-  const topicList = () => [...new Set(CARDS.map(c => c.cat).filter(Boolean))].join(", ");
+  const relatives = c => (isP(c) ? [] : WORDS().filter(x => x !== c && famKey(x) === famKey(c)));
+  const famList = () => [...new Set(WORDS().map(famKey))].join(", ");
+  const topicList = () => [...new Set(WORDS().map(c => c.cat).filter(Boolean))].join(", ");
   /* Felder und Regeln für neue Karten kommen aus index.html (C.fields, C.rules mit intro und end). */
   const FIELDS = C.fields;
   const has = f => FIELDS.includes(f);
@@ -249,17 +264,41 @@
     throw new Error(last || "model");
   }
   const genCard = word => gemini(PROMPT(word), SCHEMA, c => c.w);
+  /* Wendungen: Felder, Regeln und der Auftrag für den Grundstock kommen aus C.phrases */
+  const PFIELDS = PH ? PH.fields : [];
+  const phGroups = () => [...new Set(CARDS.filter(isP).map(c => c.cat).filter(Boolean))].join(", ");
+  const pRules = () => PFIELDS.map(f => "- " + PH.rules[f].replace("{groups}", phGroups())).concat(PH.rules.end);
+  const PSCHEMA = { type: "OBJECT", properties: Object.fromEntries(PFIELDS.map(f => [f, { type: "STRING" }])), required: PFIELDS.filter(f => f !== "note") };
+  const goodP = p => p && p.w && p.ar && p.ex;
+  const genPhrase = w => gemini([PH.rules.intro, `Wendung oder Ausdruck: "${w}"`, "Regeln:"].concat(pRules()).join("\n"), PSCHEMA, goodP);
+  const genStarter = () => gemini([PH.starter, "Regeln für jede Wendung:"].concat(pRules()).join("\n"), { type: "ARRAY", items: PSCHEMA }, a => Array.isArray(a) && a.some(goodP));
+  const pk = w => String(w || "").toLowerCase().replace(/[.,!?;:…]+/g, " ").replace(/\s+/g, " ").trim();
+  const existsP = w => CARDS.some(c => pk(c.w) === pk(w));
   const slug = w => w.toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss").replace(/[^a-z0-9]/g, "").slice(0, 30) || "wort";
   const exists = w => { const k = w.toLowerCase().replace(/^(der|die|das)\s+/, "").trim(); return CARDS.some(c => c.w.toLowerCase() === k); };
-  async function saveCard(card) {
+  /* Hängt neue Karten an cards.js im Branch main an; make(taken) baut die Einträge mit freien ids */
+  async function putCards(make, message) {
     const url = "https://api.github.com/repos/" + C.repo + "/contents/cards.js";
     const h = { Authorization: "Bearer " + token, Accept: "application/vnd.github+json" };
     for (let tries = 0; tries < 2; tries++) {
       const g = await fetch(url + "?ref=main&t=" + Date.now(), { headers: h, cache: "no-store" });
       if (!g.ok) throw new Error(String(g.status));
       const j = await g.json(), src = b64dec(j.content);
-      let id = slug(card.w), n = 2;
-      while (src.includes('"id":"' + id + '"') || CARDS.some(c => c.id === id)) id = slug(card.w) + n++;
+      const list = make(id => src.includes('"id":"' + id + '"') || CARDS.some(c => c.id === id));
+      const i = src.lastIndexOf("\n];");
+      if (i < 0) throw new Error("format");
+      const out = src.slice(0, i) + list.map(o => ",\n " + JSON.stringify(o)).join("") + src.slice(i);
+      const p = await fetch(url, { method: "PUT", headers: h, body: JSON.stringify({ message: message(list), content: b64enc(out), sha: j.sha, branch: "main" }) });
+      if (p.status === 409 || p.status === 422) continue;
+      if (!p.ok) throw new Error(String(p.status));
+      return list;
+    }
+    throw new Error("409");
+  }
+  const freeId = (w, taken, used) => { let id = slug(w), n = 2; while (taken(id) || used.has(id)) id = slug(w) + n++; used.add(id); return id; };
+  async function saveCard(card) {
+    const list = await putCards(taken => {
+      const id = freeId(card.w, taken, new Set());
       card.id = id;
       const o = { id, g: card.g, w: card.w, cat: (card.cat || "").trim() || T("newCat"), hint: card.hint || "", ar: card.ar };
       if (has("def")) o.def = card.def || "";
@@ -268,16 +307,18 @@
       const fk = (card.fam || "").trim().toLowerCase();
       if (fk && sameStem(o.w, fk) && (fk !== o.w.toLowerCase() || CARDS.some(x => famKey(x) === fk))) o.fam = fk;
       if (o.fam) { const kin = CARDS.filter(x => famKey(x) === o.fam && x.cat); if (kin.length) o.cat = topicOf(kin); }
-      const i = src.lastIndexOf("\n];");
-      if (i < 0) throw new Error("format");
-      const out = src.slice(0, i) + ",\n " + JSON.stringify(o) + src.slice(i);
-      const p = await fetch(url, { method: "PUT", headers: h, body: JSON.stringify({ message: "Neues Wort: " + o.w, content: b64enc(out), sha: j.sha, branch: "main" }) });
-      if (p.status === 409 || p.status === 422) continue;
-      if (!p.ok) throw new Error(String(p.status));
-      return o;
-    }
-    throw new Error("409");
+      return [o];
+    }, l => "Neues Wort: " + l[0].w);
+    return list[0];
   }
+  const savePhrases = items => putCards(taken => {
+    const used = new Set();
+    return items.map(p => {
+      const o = { id: freeId(p.w, taken, used), k: "p", g: "x", w: p.w.trim(), cat: (p.cat || "").trim() || T("phNewCat"), ar: p.ar, ex: p.ex };
+      if (p.tr) o.tr = p.tr; if (p.note) o.note = p.note; if (p.src) o.src = p.src;
+      return o;
+    });
+  }, l => (l.length === 1 ? "Neue Wendung: " + l[0].w : l.length + " neue Wendungen"));
   async function removeCard(id) {
     const url = "https://api.github.com/repos/" + C.repo + "/contents/cards.js";
     const h = { Authorization: "Bearer " + token, Accept: "application/vnd.github+json" };
@@ -303,7 +344,7 @@
     try {
       await removeCard(id);
       CARDS.splice(CARDS.indexOf(c), 1);
-      nouns = CARDS.filter(x => x.g === "der" || x.g === "die" || x.g === "das");
+      nouns = nounList();
       queue = queue.filter(x => x.id !== id);
       if (quiz && quiz.c.id === id) quiz = null;
       delete P.cards[id]; delete P.art[id]; changed();
@@ -341,18 +382,65 @@
     add.busy = "save"; render();
     try {
       const o = await saveCard(card);
-      CARDS.push(o); nouns = CARDS.filter(c => c.g === "der" || c.g === "die" || c.g === "das");
+      CARDS.push(o); nouns = nounList();
       add = { word: "", busy: false, card: null, msg: "" }; flash(T("saved"));
       if (!cur) { buildQueue(); cur = queue.shift() || null; }
     } catch (e) { add.busy = false; add.msg = T("genFail") + " (" + e.message + ")"; }
     add.busy = false; render();
   }
+  /* ---------- Wendungen hinzufügen ---------- */
+  let pad = { word: "", busy: false, card: null, msg: "" };
+  const gemErr = e => (e.message === "key" ? T("keyBad") : null);
+  async function doPGen() {
+    const el = $("#np"); if (el) pad.word = el.value.trim();
+    if (!pad.word || pad.busy) return;
+    if (!gkey) { pad.msg = T("needKey"); render(); return; }
+    if (existsP(pad.word)) { pad.msg = T("phDup"); render(); return; }
+    pad.busy = "gen"; pad.msg = ""; render();
+    try {
+      pad.card = await genPhrase(pad.word);
+      if (existsP(pad.card.w)) { pad.msg = T("phDup"); pad.card = null; pad.word = ""; }
+    } catch (e) {
+      if (gemErr(e)) pad.msg = gemErr(e);
+      else { queueWord(pad.word, "p"); pad.msg = T("phQueued"); pad.word = ""; }
+    }
+    pad.busy = false; render();
+  }
+  async function doPSave() {
+    if (pad.busy) return;
+    const v = id => { const el = $("#" + id); return el ? el.value.trim() : ""; };
+    const card = { w: v("pf_w"), ar: v("pf_ar"), ex: v("pf_ex"), tr: v("pf_tr"), note: v("pf_note"), cat: v("pf_cat") };
+    pad.card = card;
+    if (!card.w || !card.ar || !card.ex) return;
+    if (!token) { pad.msg = T("needTok"); render(); return; }
+    pad.busy = "save"; render();
+    try {
+      const [o] = await savePhrases([card]);
+      CARDS.push(o); pad = { word: "", busy: false, card: null, msg: "" }; flash(T("saved")); refill();
+    } catch (e) { pad.msg = T("genFail") + " (" + e.message + ")"; }
+    pad.busy = false; render();
+  }
+  async function doStarter() {
+    if (pad.busy) return;
+    if (!gkey) { pad.msg = T("needKey"); render(); return; }
+    if (!token) { pad.msg = T("needTok"); render(); return; }
+    pad.busy = "starter"; pad.msg = ""; render();
+    try {
+      const seen = new Set(CARDS.filter(isP).map(c => pk(c.w)));
+      const list = (await genStarter()).filter(p => goodP(p) && !seen.has(pk(p.w)) && seen.add(pk(p.w)));
+      const saved = list.length ? await savePhrases(list) : [];
+      saved.forEach(o => CARDS.push(o));
+      flash(T("phStarterDone").replace("{n}", saved.length)); refill();
+    } catch (e) { pad.msg = gemErr(e) || T("phStarterFail"); }
+    pad.busy = false; render();
+  }
+
   /* ---------- Warteliste ---------- */
   const pkey = w => w.toLowerCase().replace(/^(der|die|das)\s+/, "").trim();
   const isDone = k => CARDS.some(c => c.w.toLowerCase() === k || c.src === k);
-  const waiting = () => Object.entries(P.pending || {}).filter(([k, s]) => !s.done && !isDone(k));
-  function queueWord(w) { P.pending = P.pending || {}; P.pending[pkey(w)] = { w: w, t: Date.now() }; changed(); }
-  function unqueue(k) { if (P.pending && P.pending[k]) { P.pending[k] = { w: P.pending[k].w, t: Date.now(), done: true }; changed(); } }
+  const waiting = kind => Object.entries(P.pending || {}).filter(([k, s]) => !s.done && !isDone(k) && (!kind || (s.k === "p") === (kind === "p")));
+  function queueWord(w, kind) { P.pending = P.pending || {}; P.pending[pkey(w)] = kind ? { w: w, t: Date.now(), k: kind } : { w: w, t: Date.now() }; changed(); }
+  function unqueue(k) { if (P.pending && P.pending[k]) { const s = P.pending[k]; P.pending[k] = Object.assign({ w: s.w, t: Date.now(), done: true }, s.k ? { k: s.k } : {}); changed(); } }
   let working = false;
   async function refreshCards() {
     if (!token) return;
@@ -365,7 +453,7 @@
       const ids = new Set(w.CARDS.map(c => c.id));
       for (let i = CARDS.length - 1; i >= 0; i--) if (!ids.has(CARDS[i].id)) CARDS.splice(i, 1);
       fresh.forEach(c => CARDS.push(c));
-      if (fresh.length) { nouns = CARDS.filter(c => c.g === "der" || c.g === "die" || c.g === "das"); if (!cur) { buildQueue(); cur = queue.shift() || null; } render(); }
+      if (fresh.length) { nouns = nounList(); if (!cur) { buildQueue(); cur = queue.shift() || null; } render(); }
     } catch (e) {}
   }
   async function workQueue() {
@@ -374,6 +462,17 @@
     try {
       await refreshCards();
       for (const [k, s] of waiting()) {
+        if (s.k === "p") {
+          if (!PH) continue;
+          let ph;
+          try { ph = await genPhrase(s.w); } catch (e) { break; }
+          if (existsP(ph.w)) { unqueue(k); continue; }
+          try {
+            const [o] = await savePhrases([Object.assign(ph, { src: k })]);
+            CARDS.push(o); unqueue(k); flash(T("autoAdded").replace("{w}", o.w)); refill();
+          } catch (e) { break; }
+          continue;
+        }
         let card;
         try { card = await genCard(s.w); } catch (e) { break; }
         if (!card || !card.w || !card.ar || !card.ex) continue;
@@ -381,7 +480,7 @@
         if (exists(card.w)) { unqueue(k); continue; }
         try {
           const o = await saveCard(card);
-          CARDS.push(o); nouns = CARDS.filter(c => c.g === "der" || c.g === "die" || c.g === "das");
+          CARDS.push(o); nouns = nounList();
           unqueue(k); flash(T("autoAdded").replace("{w}", fullWord(o)));
           if (!cur) { buildQueue(); cur = queue.shift() || null; }
         } catch (e) { break; }
@@ -390,8 +489,8 @@
   }
   setInterval(workQueue, 5 * 60 * 1000);
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") setTimeout(workQueue, 3000); });
-  function renderWait() {
-    const w = waiting();
+  function renderWait(kind) {
+    const w = waiting(kind || "w");
     if (!w.length) return "";
     return `<div class="wait"><p class="waith">${T("waitH")}</p>${w.map(([k, s]) => `<span class="chip de">${esc(s.w)}<button data-act="unq" data-k="${esc(k)}" aria-label="${T("waitRm")}">×</button></span>`).join("")}</div>`;
   }
@@ -489,8 +588,8 @@
   const fill = (tpl, v) => tpl.replace(/\{(\w+)\}/g, (m, k) => (v[k] !== undefined ? v[k] : m));
   const pickOne = a => a[Math.floor(Math.random() * a.length)];
   function pickWords() {
-    const seen = CARDS.filter(c => P.cards[c.id]), known = seen.filter(c => P.cards[c.id].b >= 1);
-    const pool = known.length >= 2 ? known : seen.length >= 2 ? seen : CARDS;
+    const all = WORDS(), seen = all.filter(c => P.cards[c.id]), known = seen.filter(c => P.cards[c.id].b >= 1);
+    const pool = known.length >= 2 ? known : seen.length >= 2 ? seen : all;
     const a = pickOne(pool), same = pool.filter(c => c !== a && c.cat && c.cat === a.cat), rest = pool.filter(c => c !== a);
     return rest.length ? [a, pickOne(same.length ? same : rest)] : [a];
   }
@@ -558,7 +657,7 @@
     const c = cur, s = P.cards[c.id], always = opt("arFirst", false);
     const arFirst = always || (opt("prodAuto", true) && !!s && s.b >= 2);
     const front = arFirst
-      ? `<p class="ar-big">${esc(c.ar)}</p><p class="hint">${T(always ? "whatDe" : "sayDe")}</p>${calm() ? "" : '<div class="timer"></div>'}`
+      ? `<p class="ar-big">${esc(c.ar)}</p><p class="hint">${T(always ? "whatDe" : isP(c) ? "sayPh" : "sayDe")}</p>${calm() ? "" : '<div class="timer"></div>'}`
       : `${wordHTML(c)}${c.hint ? `<p class="hint de">${esc(c.hint)}</p>` : ""}`;
     const back = `
       ${arFirst ? wordHTML(c) + (c.hint ? `<p class="hint de">${esc(c.hint)}</p>` : "") : ""}
@@ -570,8 +669,8 @@
       ${c.note ? `<p class="note">${c.note}</p>` : ""}
       ${famRow(c)}`;
     return `
-      <p class="meta">${T("left").replace("{n}", queue.length + 1)}${s ? "" : ` <span class="new">${T("newCard")}</span>`}</p>
-      <div class="card ${gClass(c)} ${flipped ? "flipped" : ""}" id="card" data-act="flip" role="button" tabindex="0" aria-label="${T("flip")}">
+      <p class="meta">${T("left").replace("{n}", queue.length + 1)}${isP(c) ? ` <span class="new">${T("phTag")}</span>` : ""}${s ? "" : ` <span class="new">${T("newCard")}</span>`}</p>
+      <div class="card ${gClass(c)}${isP(c) ? " ph" : ""} ${flipped ? "flipped" : ""}" id="card" data-act="flip" role="button" tabindex="0" aria-label="${T("flip")}">
         ${c.cat ? `<p class="cat">${esc(c.cat)}</p>` : ""}
         <div class="face">${flipped ? back : front}</div>
         ${speakBtn("w", T("sayWord"))}
@@ -603,10 +702,10 @@
   }
 
   function grouped() {
-    const out = [], seen = new Set();
-    CARDS.forEach(c => {
+    const out = [], seen = new Set(), all = WORDS();
+    all.forEach(c => {
       if (seen.has(c.id)) return;
-      const fam = CARDS.filter(x => famKey(x) === famKey(c));
+      const fam = all.filter(x => famKey(x) === famKey(c));
       fam.forEach((x, i) => { seen.add(x.id); out.push([x, i > 0, fam.length > 1]); });
     });
     return out;
@@ -625,11 +724,48 @@
     });
     const nh = $("#nohits"); if (nh) nh.hidden = any;
   }
+  let listKind = "w";
+  const dotsOf = c => { const s = P.cards[c.id], b = s ? s.b : -1; return `<span class="lvl" aria-label="${T("level")} ${Math.max(b, 0)}">${Array.from({ length: INT.length - 1 }, (_, i) => `<i class="${i < b ? "on" : ""}"></i>`).join("")}</span>`; };
+  const searchBox = () => `<input id="q" class="search" type="search" dir="auto" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${esc(T("searchPh"))}" value="${esc(query)}">`;
+  function renderSeg() {
+    if (!PH) return "";
+    const b = (k, label, n) => `<button data-act="lk" data-k="${k}" aria-pressed="${listKind === k}">${label} <span class="segn">${n}</span></button>`;
+    return `<div class="seg">${b("w", T("segW"), WORDS().length)}${b("p", T("segP"), CARDS.filter(isP).length)}</div>`;
+  }
+  function renderPAdd() {
+    const c = pad.card, f = (id, label, val, big) => `<label class="fld">${T(label)}${big ? `<textarea id="${id}" rows="2" dir="auto">${esc(val || "")}</textarea>` : `<input id="${id}" dir="auto" value="${esc(val || "")}">`}</label>`;
+    return `<section class="add">
+      <h2>${T("phAddH")}</h2>
+      <div class="addrow"><input id="np" dir="auto" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${esc(T("phAddPh"))}" value="${esc(pad.word)}">
+      <button class="btn ok" data-act="pgen" ${pad.busy ? "disabled" : ""}>${pad.busy === "gen" ? T("genBusy") : T("gen")}</button></div>
+      ${pad.msg ? `<p class="addmsg">${esc(pad.msg)}</p>` : ""}
+      ${renderWait("p")}
+      ${c ? `<div class="preview">${f("pf_w", "phF_w", c.w)}${f("pf_ar", "f_ar", c.ar)}${f("pf_ex", "f_ex", c.ex, 1)}${PFIELDS.includes("tr") ? f("pf_tr", "f_tr", c.tr, 1) : ""}${f("pf_note", "f_note", c.note, 1)}${f("pf_cat", "phF_cat", c.cat)}
+        <div class="row2"><button class="btn" data-act="pdiscard">${T("discard")}</button><button class="btn" data-act="pgen">${T("regen")}</button></div>
+        <button class="btn ok wide" data-act="psave" ${pad.busy ? "disabled" : ""}>${pad.busy === "save" ? T("saving") : T("saveCard")}</button></div>` : ""}
+      ${CARDS.filter(isP).length < 10 ? `<div class="starter"><p class="dim">${T("phStarterHelp")}</p><button class="btn wide" data-act="pstart" ${pad.busy ? "disabled" : ""}>${pad.busy === "starter" ? T("phStarterBusy") : T("phStarter")}</button></div>` : ""}
+    </section>`;
+  }
+  function renderPhrases() {
+    const all = CARDS.filter(isP), groups = new Map();
+    all.forEach(c => {
+      const g = c.cat || T("phNewCat");
+      if (!groups.has(g)) groups.set(g, []);
+      const open = listOpen === c.id;
+      groups.get(g).push(`<li class="${gClass(c)} ph" data-s="${esc(hay(c))}"><button class="row" data-act="open" data-id="${c.id}">
+        <span class="de word">${esc(c.w)}</span>${dotsOf(c)}</button>
+        ${open ? `<div class="detail"><p class="ar" lang="ar" dir="rtl">${esc(c.ar)}</p><div class="exrow"><p class="ex de">${c.ex}</p><button class="say" data-t="${esc(plain(c.ex))}" aria-label="${esc(T("sayEx"))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg></button></div>${c.tr ? `<p class="tr" lang="ar" dir="rtl">${esc(c.tr)}</p>` : ""}${c.note ? `<p class="note">${c.note}</p>` : ""}<div class="row2"><button class="btn" data-act="sayt" data-t="${esc(c.w.replace(/…/g, ""))}">${T("phSay")}</button><button class="btn again" data-act="del" data-id="${c.id}">${T("delCard")}</button></div></div>` : ""}</li>`);
+    });
+    const secs = [...groups.entries()].map(([t, rows]) => `<section class="topic"><h3><span>${esc(t)}</span><span class="tcount">${rows.length}</span></h3><ul class="list">${rows.join("")}</ul></section>`).join("");
+    const learned = all.filter(c => P.cards[c.id] && P.cards[c.id].b >= 3).length;
+    return `${renderSeg()}${renderPAdd()}${all.length ? searchBox() + `<p class="meta">${T("phStat").replace("{a}", learned).replace("{t}", all.length)}</p>` : ""}${secs}<p id="nohits" class="meta dim" hidden>${T("noHits")}</p>`;
+  }
   function renderList() {
+    if (PH && listKind === "p") return renderPhrases();
     const topics = new Map();
     let famTopic = null;
     grouped().forEach(([c, sub, inFam]) => {
-      if (!sub) famTopic = topicOf(CARDS.filter(x => famKey(x) === famKey(c))) || T("newCat");
+      if (!sub) famTopic = topicOf(WORDS().filter(x => famKey(x) === famKey(c))) || T("newCat");
       if (!topics.has(famTopic)) topics.set(famTopic, []);
       const s = P.cards[c.id], b = s ? s.b : -1;
       const dots = Array.from({ length: INT.length - 1 }, (_, i) => `<i class="${i < b ? "on" : ""}"></i>`).join("");
@@ -639,9 +775,9 @@
         ${open ? `<div class="detail"><p class="ar" lang="ar" dir="rtl">${esc(c.ar)}</p>${c.perf ? `<p class="perf de">${T("perfL")} <b>${esc(c.perf)}</b></p>` : ""}<p class="ex de">${c.ex}</p>${c.tr ? `<p class="tr" lang="ar" dir="rtl">${esc(c.tr)}</p>` : ""}${famRow(c)}<button class="btn again" data-act="del" data-id="${c.id}">${T("delCard")}</button></div>` : ""}</li>`);
     });
     const secs = [...topics.entries()].map(([t, rows]) => `<section class="topic"><h3><span>${esc(t)}</span><span class="tcount">${rows.length}</span></h3><ul class="list">${rows.join("")}</ul></section>`).join("");
-    const learned = CARDS.filter(c => P.cards[c.id] && P.cards[c.id].b >= 3).length;
-    return `${renderAdd()}<input id="q" class="search" type="search" dir="auto" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${esc(T("searchPh"))}" value="${esc(query)}">
-      <p class="meta">${T("listStat").replace("{a}", learned).replace("{t}", CARDS.length)}</p>${secs}<p id="nohits" class="meta dim" hidden>${T("noHits")}</p>`;
+    const words = WORDS(), learned = words.filter(c => P.cards[c.id] && P.cards[c.id].b >= 3).length;
+    return `${renderSeg()}${renderAdd()}${searchBox()}
+      <p class="meta">${T("listStat").replace("{a}", learned).replace("{t}", words.length)}</p>${secs}<p id="nohits" class="meta dim" hidden>${T("noHits")}</p>`;
   }
 
   function renderSettings() {
@@ -665,6 +801,7 @@
       <label class="btn filebtn">${T("import")}<input id="imp" type="file" accept="application/json,.json"></label></div>
       <h2>${T("optsH")}</h2>
       <label class="fld inline">${T("newPerDay")} <input id="npd" type="number" min="0" max="50" value="${opt("newPerDay", C.newPerDay || 10)}"></label>
+      ${PH ? `<label class="fld inline">${T("newPhrases")} <input id="nppd" type="number" min="0" max="20" value="${opt("newPhrases", PH.perDay || 3)}"></label>` : ""}
       <label class="chk"><input id="pda" type="checkbox" ${opt("prodAuto", true) ? "checked" : ""}> ${T("prodAuto")}</label>
       <label class="chk"><input id="arf" type="checkbox" ${opt("arFirst", false) ? "checked" : ""}> ${T("arFirst")}</label>
       <label class="chk"><input id="slw" type="checkbox" ${opt("slow", false) ? "checked" : ""}> ${T("slow")}</label>
@@ -694,7 +831,7 @@
     if (act === "flip") flip();
     else if (act === "yes") answer(true);
     else if (act === "no") answer(false);
-    else if (act === "more") { P.newDay = { d: today(), n: Math.max(0, newToday() - opt("newPerDay", C.newPerDay || 10)) }; changed(); buildQueue(); next(); }
+    else if (act === "more") { const p = newToday("p"); P.newDay = { d: today(), n: Math.max(0, newToday() - opt("newPerDay", C.newPerDay || 10)) }; if (p) P.newDay.p = p; changed(); buildQueue(); next(); }
     else if (act === "art") quizAnswer(el.dataset.g);
     else if (act === "nextq") { pickQuiz(); render(); }
     else if (act === "open") { listOpen = listOpen === el.dataset.id ? null : el.dataset.id; render(); }
@@ -719,7 +856,12 @@
     else if (act === "delgem") { gkey = ""; try { localStorage.removeItem(GK); } catch (x) {} render(); }
     else if (act === "prnew") prNew();
     else if (act === "prcheck") prCheck();
-    else if (act === "pradd") { queueWord(el.dataset.t); flash(T("prAdded")); el.disabled = true; setTimeout(workQueue, 500); }
+    else if (act === "pradd") { queueWord(el.dataset.t, PH ? "p" : undefined); flash(T("prAdded")); el.disabled = true; setTimeout(workQueue, 500); }
+    else if (act === "lk") { listKind = el.dataset.k; listOpen = null; query = ""; render(); }
+    else if (act === "pgen") { const w = $("#np"); if (w && pad.card && !w.value.trim()) w.value = pad.word; doPGen(); }
+    else if (act === "psave") doPSave();
+    else if (act === "pdiscard") { pad = { word: "", busy: false, card: null, msg: "" }; render(); }
+    else if (act === "pstart") doStarter();
     else if (act === "reset") { if (confirm(T("resetQ"))) { P = Object.assign(emptyP(), { opts: P.opts }); changed(); buildQueue(); next(); } }
   });
   document.addEventListener("change", e => {
@@ -728,10 +870,12 @@
     else if (e.target.id === "arf") setOpt("arFirst", e.target.checked);
     else if (e.target.id === "slw") setOpt("slow", e.target.checked);
     else if (e.target.id === "pda") setOpt("prodAuto", e.target.checked);
+    else if (e.target.id === "nppd") { setOpt("newPhrases", Math.max(0, Math.min(20, parseInt(e.target.value, 10) || 0))); if (!cur) { buildQueue(); cur = queue.shift() || null; } }
   });
   document.addEventListener("input", e => { if (e.target.id === "q") { query = e.target.value; applyFilter(); } else if (e.target.id === "pa") { pr.answer = e.target.value; prSave(); } });
   document.addEventListener("keydown", e => {
     if (e.target.id === "nw" && e.key === "Enter") { e.preventDefault(); doGen(); return; }
+    if (e.target.id === "np" && e.key === "Enter") { e.preventDefault(); doPGen(); return; }
     if (mode !== "learn" || !cur || /INPUT|TEXTAREA/.test(e.target.tagName)) return;
     if (e.key === " " || e.key === "Enter") { e.preventDefault(); flip(); }
     else if (flipped && (e.key === "1" || e.key === "ArrowLeft")) answer(false);

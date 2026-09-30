@@ -38,22 +38,27 @@ if (!force) {
 const ctx = { window: {} };
 vm.runInNewContext(readFileSync("cards.js", "utf8"), ctx);
 const cards = ctx.window.CARDS || [];
-const P = JSON.parse(git("progress.json") || "null") || { cards: {}, newDay: {}, opts: {} };
-const now = Date.now();
-const due = cards.filter(c => P.cards[c.id] && P.cards[c.id].due <= now).length;
-const perDay = (P.opts && P.opts.newPerDay !== undefined) ? P.opts.newPerDay : 10;
-const doneNew = P.newDay && P.newDay.d === today ? P.newDay.n : 0;
-const fresh = Math.min(cards.filter(c => !P.cards[c.id]).length, Math.max(0, perDay - doneNew));
-const total = due + fresh;
-if (!total && !force) { console.log("Heute ist nichts mehr fällig."); process.exit(0); }
-
 const appCtx = { window: {}, localStorage: { getItem: () => null } };
 for (const m of readFileSync("index.html", "utf8").matchAll(/<script>([\s\S]*?)<\/script>/g)) vm.runInNewContext(m[1], appCtx);
 const APP = appCtx.window.APP || {};
+
+const P = JSON.parse(git("progress.json") || "null") || { cards: {}, newDay: {}, opts: {} };
+const now = Date.now();
+const opt = (k, d) => (P.opts && P.opts[k] !== undefined ? P.opts[k] : d);
+const isP = c => c.k === "p";
+const due = cards.filter(c => P.cards[c.id] && P.cards[c.id].due <= now).length;
+const newDay = P.newDay && P.newDay.d === today ? P.newDay : { n: 0, p: 0 };
+const fresh = Math.min(cards.filter(c => !P.cards[c.id] && !isP(c)).length, Math.max(0, opt("newPerDay", APP.newPerDay || 10) - (newDay.n || 0)));
+// Wendungen (k: "p") haben ein eigenes Tageslimit, nur wenn die App sie eingeschaltet hat (APP.phrases)
+const freshP = APP.phrases ? Math.min(cards.filter(c => !P.cards[c.id] && isP(c)).length, Math.max(0, opt("newPhrases", APP.phrases.perDay || 3) - (newDay.p || 0))) : 0;
+const total = due + fresh + freshP;
+if (!total && !force) { console.log("Heute ist nichts mehr fällig."); process.exit(0); }
+
 const R = APP.remind;
 const parts = [];
 if (due) parts.push(R.due(due));
 if (fresh) parts.push(R.fresh(fresh));
+if (freshP) parts.push(R.freshP ? R.freshP(freshP) : R.fresh(freshP));
 webpush.setVapidDetails(process.env.VAPID_SUBJECT || "mailto:noreply@example.com", process.env.VAPID_PUBLIC, process.env.VAPID_PRIVATE);
 const msg = { title: APP.t.appName, body: parts.length ? R.body(parts) : R.test, count: total };
 console.log("Nachricht:", msg.body);

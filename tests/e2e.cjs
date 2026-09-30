@@ -77,6 +77,16 @@ function makeGitHub(repo, files) {
   return { store, log, handle };
 }
 
+// ---------- Phrases (Wendungen) returned by the Gemini mock ----------
+const PH_ONE = { w: "mir wirklich zu hoch", ar: "غالي عليا أوي", ex: "Die Miete ist <b>mir wirklich zu hoch</b>.", tr: "الإيجار غالي عليا أوي.", note: "", cat: "إبداء الرأي" };
+const PH_STARTER = [
+  { w: "Ich finde, dass …", ar: "أنا شايفة إن…", ex: "<b>Ich finde, dass</b> die Wohnung zu klein ist.", tr: "أنا شايفة إن الشقة صغيرة.", note: "", cat: "إبداء الرأي" },
+  { w: "Also, …", ar: "يعني…", ex: "<b>Also</b>, ich weiß nicht genau.", tr: "يعني، مش عارفة بالظبط.", note: "بتقوليها وإنتي بتفكري", cat: "كسب الوقت" },
+  { w: "Moment mal …", ar: "لحظة…", ex: "<b>Moment mal</b>, das stimmt nicht.", tr: "لحظة، ده مش صح.", note: "", cat: "كسب الوقت" },
+  { w: "Mir wirklich zu hoch", ar: "مكرر", ex: "Das ist <b>mir wirklich zu hoch</b>.", tr: "مكرر", note: "", cat: "إبداء الرأي" },
+  { w: "Also …", ar: "مكرر", ex: "<b>Also</b> gut.", tr: "مكرر", note: "", cat: "كسب الوقت" }
+];
+
 // ---------- Gemini mock ----------
 function makeGemini() {
   const g = { calls: [], mode: "ok", card: null };
@@ -340,9 +350,63 @@ const toastOf = async (page, action) => {
     check("Eman: feedback shows natural version with play button, tip and phrase", fbView.nat === "Die Miete ist mir wirklich zu hoch." && fbView.tips === 1 && fbView.chunks === 1 && fbView.say, fbView);
     await page.screenshot({ path: SHOTS + "/light-9-practice.png", fullPage: true });
     await grab(page, "practice-feedback");
+    const ptext = body => body.contents[0].parts[0].text;
+    gem.card = body => ptext(body).includes("Antwort der Schülerin")
+      ? { correct: false, corrected: "Die Miete ist zu hoch.", natural: "Die Miete ist mir wirklich zu hoch.", tips: ["خدي بالك: Miete اسم مؤنث"], used: ["hoch"], chunks: ["mir wirklich zu hoch"] }
+      : ptext(body).includes("Grundstock") ? PH_STARTER : ptext(body).includes("Wendung oder Ausdruck") ? PH_ONE
+      : { task: "قولي لصاحب الشقة إن الإيجار غالي عليكي.", starter: "Entschuldigung, aber" };
+    const cardPuts = () => gh.log.filter(e => e.method === "PUT" && e.path.endsWith("/cards.js"));
+    const putsBefore = cardPuts().length;
     await page.click('[data-act="pradd"]');
     const prPend = JSON.parse(await page.evaluate(() => localStorage.getItem("kk-eman-v2"))).pending;
-    check("Eman: + puts the phrase on the waitlist", prPend && prPend["mir wirklich zu hoch"], prPend);
+    check("Eman: + puts the phrase on the waitlist as a phrase (k: p)", prPend && prPend["mir wirklich zu hoch"] && prPend["mir wirklich zu hoch"].k === "p", prPend);
+    for (let i = 0; i < 40 && cardPuts().length === putsBefore; i++) await sleep(200);
+    const phPut = cardPuts().pop(), phLine = phPut ? unb64(phPut.body.content).trim().split("\n").slice(-2, -1)[0] : "";
+    const phPrompt = ptext(gem.calls.filter(c => ptext(c.body).includes("Wendung oder Ausdruck")).pop().body);
+    check("Eman: phrase prompt is in her style (Egyptian Arabic, tr field, phrase groups)", /Ägypterin/.test(phPrompt) && /- tr:/.test(phPrompt) && /- cat: wofür/.test(phPrompt) && !/Wortfamilie/.test(phPrompt), phPrompt.slice(0, 300));
+    check("Eman: the phrase is saved to cards.js as k: p with its source", phPut && phPut.body.message === "Neue Wendung: mir wirklich zu hoch" && phLine === ' ' + JSON.stringify({ id: "mirwirklichzuhoch", k: "p", g: "x", w: "mir wirklich zu hoch", cat: "إبداء الرأي", ar: PH_ONE.ar, ex: PH_ONE.ex, tr: PH_ONE.tr, src: "mir wirklich zu hoch" }), phLine);
+
+    // Phrases list: separate from the word list, starter set from Gemini
+    await tab(page, "list");
+    const seg = await page.$$eval(".seg button", els => els.map(e => e.textContent.trim()));
+    const wordRows = await page.$$eval(".list li", els => els.length);
+    check("Eman: list has Arabic switch words/phrases, words list without the phrase", JSON.stringify(seg) === JSON.stringify(["الكلمات 54", "العبارات 1"]) && wordRows === 54 && !(await page.$('[data-id="mirwirklichzuhoch"]')), { seg, wordRows });
+    await page.click('[data-act="lk"][data-k="p"]');
+    const phView = await page.evaluate(() => ({ groups: [...document.querySelectorAll(".topic h3 span:first-child")].map(e => e.textContent), rows: document.querySelectorAll(".list li.ph").length, starter: !!document.querySelector('[data-act="pstart"]'), addPh: document.querySelector("#np").placeholder }));
+    check("Eman: phrases view shows the phrase in its Arabic group and offers the starter set", JSON.stringify(phView.groups) === '["إبداء الرأي"]' && phView.rows === 1 && phView.starter && phView.addPh === "بالألماني أو العربي أو الإنجليزي", phView);
+    await grab(page, "phrases-list");
+    await page.screenshot({ path: SHOTS + "/light-10-phrases.png", fullPage: true });
+    const starterToast = await toastOf(page, () => page.click('[data-act="pstart"]'));
+    const stPut = cardPuts().pop(), stLines = unb64(stPut.body.content).trim().split("\n").filter(l => l.includes('"k":"p"'));
+    check("Eman: starter set saved in one commit without duplicates", stPut.body.message === "3 neue Wendungen" && stLines.length === 4 && starterToast === "العبارات اتضافت: 3", { msg: stPut.body.message, n: stLines.length, starterToast });
+    const phView2 = await page.evaluate(() => ({ groups: [...document.querySelectorAll(".topic h3 span:first-child")].map(e => e.textContent), rows: document.querySelectorAll(".list li.ph").length }));
+    check("Eman: phrases grouped by what they are for", JSON.stringify(phView2.groups) === '["إبداء الرأي","كسب الوقت"]' && phView2.rows === 4, phView2);
+    await page.click('[data-act="open"][data-id="also"]');
+    await grab(page, "phrases-detail");
+    const det = await page.evaluate(() => ({ tr: (document.querySelector(".detail .tr") || {}).textContent, note: (document.querySelector(".detail .note") || {}).textContent, say: !!document.querySelector(".detail .say[data-t]") }));
+    check("Eman: phrase detail shows translation, usage note and play button", det.tr === "يعني، مش عارفة بالظبط." && det.note === "بتقوليها وإنتي بتفكري" && det.say, det);
+
+    // Learn: new phrases come on top of new words (own daily limit), shown as phrase
+    await tab(page, "learn");
+    const learnPh = await page.evaluate(() => ({ ph: !!document.querySelector("#card.ph"), tag: [...document.querySelectorAll(".meta .new")].map(e => e.textContent) }));
+    check("Eman: learning shows a new phrase card marked 'عبارة'", learnPh.ph && learnPh.tag.includes("عبارة"), learnPh);
+    await grab(page, "learn-phrase");
+    let phSeen = 0;
+    for (let i = 0; i < 10 && (await page.$("#card")); i++) { if (await page.$("#card.ph")) phSeen++; await page.click("#card"); await sleep(450); await page.click('[data-act="yes"]'); await sleep(80); }
+    const nd = JSON.parse(await page.evaluate(() => localStorage.getItem("kk-eman-v2"))).newDay;
+    check("Eman: three new phrases per day, counted apart from words", phSeen === 3 && nd.p === 3, { phSeen, nd });
+    // A phrase she knows (box 2) shows the meaning first and asks for the phrase
+    const boxTwo = p => { p.cards.ichfindedass = { b: 2, due: 0, t: Date.now() + 1e9, n: 3, w: 0 }; p.updated = Date.now() + 1e9; return p; };
+    gh.store["progress:progress.json"].content = JSON.stringify(boxTwo(JSON.parse(gh.store["progress:progress.json"].content)));
+    await page.evaluate(() => { const p = JSON.parse(localStorage.getItem("kk-eman-v2")); p.cards.ichfindedass = { b: 2, due: 0, t: Date.now() + 1e9, n: 3, w: 0 }; p.updated = Date.now() + 1e9; localStorage.setItem("kk-eman-v2", JSON.stringify(p)); });
+    await page.goto(`${ORIGIN}/eman-deutsch/`); await sleep(1500);
+    // the phrases come from cards.js on GitHub (refreshed after the first sync)
+    await page.waitForSelector("#card.ph", { timeout: 10000 }).catch(() => {});
+    const known = await page.evaluate(() => ({ ph: !!document.querySelector("#card.ph"), ar: (document.querySelector("#card .ar-big") || {}).textContent, hint: (document.querySelector("#card .hint") || {}).textContent }));
+    check("Eman: known phrase shows the meaning first and asks her to say it", known.ph && known.ar === "أنا شايفة إن…" && known.hint === "قوليها بالألماني", known);
+    await grab(page, "learn-phrase-known");
+    await tab(page, "settings");
+    check("Eman: settings have new phrases per day in Arabic", (await page.textContent(".settings")).includes("عبارات جديدة في اليوم") && (await page.inputValue("#nppd")) === "3");
 
     // Quiz
     await tab(page, "quiz");
@@ -432,6 +496,7 @@ const toastOf = async (page, action) => {
   ["der", "die", "das", "GitHub", "Gemini", "token", "key", "API", "Google", "AI", "Studio", "Contents", "Read", "and", "write", "Fine", "grained", "repo", "github", "pat", "AIza", "umziehen", "Miete", "ICE"].forEach(w => allowed.add(w));
   // German sentences in the practice mock are content, not UI
   ["Die Miete ist mir wirklich zu hoch", "Die Miete ist zu hoch", "Entschuldigung, aber"].forEach(addWords);
+  [PH_ONE].concat(PH_STARTER).forEach(c => Object.values(c).forEach(addWords));
   const cardWords = loadCards(emanCards).map(c => c.w).sort((a, b) => b.length - a.length);
   const leaks = [];
   for (const [state, text] of allUiText) {

@@ -13,7 +13,7 @@ const load = src => { const ctx = { window: {} }; vm.runInNewContext(src, ctx); 
 let src = readFileSync("cards.js", "utf8");
 let cards = load(src);
 const isDone = k => cards.some(c => c.w.toLowerCase() === k || c.src === k);
-const todo = Object.entries(P.pending || {}).filter(([k, s]) => !s.done && !isDone(k)).slice(0, 5);
+const todo = Object.entries(P.pending || {}).filter(([k, s]) => !s.done && !s.k && !isDone(k)).slice(0, 5); // Wendungen (k: "p") erstellt die App selbst
 if (!todo.length) { console.log("Warteliste ist leer."); process.exit(0); }
 
 const appCtx = { window: {}, localStorage: { getItem: () => null } };
