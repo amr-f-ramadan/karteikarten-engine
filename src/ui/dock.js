@@ -77,7 +77,8 @@ export function createDock(ctx, nav) {
   /* Auch ein abgebrochener Touch (der Browser nahm die Geste) landet auf einem Symbol, nie dazwischen */
   function release(e) {
     if (!active) return; active = false; lastRelease = performance.now();
-    if (lastRelease - lastT > 80) vel = 0; // Pause vor dem Loslassen: kein Schnipp
+    // Kein Schnipp nach einer Pause vor dem Loslassen, und keiner, wenn der Browser die Geste abgebrochen hat
+    if (e.type !== "pointerup" || lastRelease - lastT > 80) vel = 0;
     const tapped = !moved && e.type === "pointerup" ? itemAt(e) : null;
     if (tapped) pick(Math.round(pos) + nearestTurn(items.indexOf(tapped) - pos, N), "tap");
     else pick(settleTarget(pos, vel, 1 / SLOT, dir()), moved ? "swipe" : "tap");

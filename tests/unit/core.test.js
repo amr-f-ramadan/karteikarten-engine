@@ -158,6 +158,7 @@ test("dock: a loop of five draws each item at its nearest turn, a lift settles o
   assert.equal(settleTarget(1.4, 0, 1 / 72, 1), 1, "no speed: nearest slot");
   assert.equal(settleTarget(1.4, -0.9, 1 / 72, 1), 3, "a flick to the left carries two slots further");
   assert.equal(settleTarget(1.4, -0.9, 1 / 72, -1), -1, "mirrored for RTL");
+  assert.equal(settleTarget(1.4, -9, 1 / 72, 1), 3, "a flick carries two slots at most");
   assert.equal(glideDuration(0), 200); assert.equal(glideDuration(2), 440); assert.equal(glideDuration(9), 520);
 });
 
