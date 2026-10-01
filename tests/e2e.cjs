@@ -511,11 +511,11 @@ const toastOf = async (page, action) => {
     const word = (await page.textContent("#card .word")).replace(/\s+/g, " ").trim();
     gem.ttsDelay = 1200;
     await page.click("#card .say"); await sleep(500);
-    const ring = await page.evaluate(() => ({ cls: document.querySelector("#card .say").classList.contains("loading"), busy: document.querySelector("#card .say").getAttribute("aria-busy"), ring: getComputedStyle(document.querySelector("#card .say"), "::after").animationName }));
+    const ring = await page.evaluate(() => ({ cls: document.querySelector("#card .say").classList.contains("loading"), busy: document.querySelector("#card .say").getAttribute("aria-busy"), ring: getComputedStyle(document.querySelector("#card .say"), "::after").animationName, inside: getComputedStyle(document.querySelector("#card .say"), "::after").top, icon: getComputedStyle(document.querySelector("#card .say svg")).animationName }));
     await page.screenshot({ path: SHOTS + "/voice-loading.png", clip: { x: 0, y: 100, width: 390, height: 500 } });
     await sleep(1300); gem.ttsDelay = 0;
     const ringGone = await page.evaluate(() => !document.querySelector(".loading"));
-    check("Voice: a ring turns around the speaker while a new voice is made, and goes away", ring.cls && ring.busy === "true" && ring.ring === "spin" && ringGone, { ring, ringGone });
+    check("Voice: a ring turns around the speaker while a new voice is made, and goes away", ring.cls && ring.busy === "true" && ring.ring === "spin" && ring.inside === "0px" && ring.icon === "pulse" && ringGone, { ring, ringGone });
     const first = await page.evaluate(() => ({ played: window.__played.length, src: (window.__played[0] || {}).src || "", said: window.__said.length }));
     const t1 = gem.tts[0];
     check("Voice: first tap asks the cheapest TTS model with only the text", gem.lists === 1 && gem.tts.length === 1 && /gemini-9-flash-lite-tts:generateContent/.test(t1.url) && JSON.stringify(t1.body.contents) === JSON.stringify([{ parts: [{ text: word }] }]), { lists: gem.lists, n: gem.tts.length, url: t1 && t1.url, contents: t1 && t1.body.contents, word });

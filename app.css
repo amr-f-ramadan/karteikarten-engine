@@ -167,8 +167,9 @@ nav button:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
 .list li.ph .word{font-size:.98rem;font-weight:600;line-height:1.35}
 
 /* Neue Aussprache wird gerade erzeugt: Ring um den Lautsprecher, Wort-Chips und Knöpfe pulsieren */
-.say.loading::after{content:"";position:absolute;inset:-5px;border-radius:50%;border:3px solid color-mix(in srgb,var(--accent) 22%,transparent);border-top-color:var(--accent);animation:spin .75s linear infinite}
-[data-act=sayt].loading{animation:pulse 1s ease-in-out infinite}
+.say.loading::after{content:"";position:absolute;inset:0;border-radius:50%;border:3px solid color-mix(in srgb,var(--accent) 22%,transparent);border-top-color:var(--accent);animation:spin .75s linear infinite}
+/* Ring liegt innerhalb des Knopfs: Safari schneidet bei backdrop-filter alles außerhalb ab. Dazu pulsiert das Symbol. */
+.say.loading svg,[data-act=sayt].loading{animation:pulse 1s ease-in-out infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{50%{opacity:.45}}
-@media (prefers-reduced-motion:reduce){.say.loading::after{animation-duration:2.5s}[data-act=sayt].loading{animation:none;opacity:.6}}
+@media (prefers-reduced-motion:reduce){.say.loading::after{animation-duration:2.5s}.say.loading svg,[data-act=sayt].loading{animation:none;opacity:.6}}
