@@ -177,3 +177,6 @@ nav button:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
 .wordrow{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .wordrow .word{flex:1;min-width:0}
 .wordrow .say,.exrow .say{position:relative;inset:auto;flex:none;width:36px;height:36px}
+/* Korrekturen in der Übung: falsch durchgestrichen, richtig hervorgehoben */
+.prde del{color:var(--again);text-decoration:line-through;text-decoration-thickness:2px;opacity:.9}
+.prde ins{text-decoration:none;font-weight:700;color:var(--ok);background:color-mix(in srgb,var(--ok) 20%,transparent);border-radius:6px;padding:0 3px}

@@ -694,6 +694,44 @@
     catch (e) { pr.msg = prError(e); }
     pr.busy = false; prSave(); render();
   }
+  /* Korrekturen sichtbar machen: Antwort und korrigierte Fassung Wort für Wort vergleichen (auf dem Gerät, ohne Gemini).
+     Falsches durchgestrichen, Richtiges direkt dahinter hervorgehoben. */
+  function tokens(t) {
+    const out = [], re = /[\p{L}\p{N}'’-]+|[^\s\p{L}\p{N}]/gu;
+    let m, last = 0;
+    while ((m = re.exec(t))) { out.push({ t: m[0], sp: m.index > last || (m.index > 0 && /\s/.test(t[m.index - 1])) }); last = m.index + m[0].length; }
+    if (out.length) out[0].sp = false;
+    return out;
+  }
+  function diffHTML(a, b) {
+    const x = tokens(a), y = tokens(b), n = x.length, m = y.length;
+    const L = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+    for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = x[i].t === y[j].t ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+    const ops = [];
+    let i = 0, j = 0;
+    while (i < n || j < m) {
+      if (i < n && j < m && x[i].t === y[j].t) { ops.push(["=", y[j]]); i++; j++; }
+      else if (j < m && (i === n || L[i][j + 1] >= L[i + 1][j])) ops.push(["+", y[j++]]);
+      else ops.push(["-", x[i++]]);
+    }
+    // Gelöschtes vor Eingefügtes, damit „falsch → richtig“ nebeneinander steht
+    for (let k = 0; k < ops.length; k++) {
+      let e = k; while (e < ops.length && ops[e][0] !== "=") e++;
+      if (e - k > 1) { const run = ops.slice(k, e); ops.splice(k, e - k, ...run.filter(o => o[0] === "-"), ...run.filter(o => o[0] === "+")); }
+      k = e;
+    }
+    const sp = (tk, k) => (k > 0 && tk.sp ? " " : "");
+    let html = "", k = 0;
+    while (k < ops.length) {
+      const kind = ops[k][0];
+      let e = k, txt = "";
+      while (e < ops.length && ops[e][0] === kind) { txt += (e === k ? "" : sp(ops[e][1], 1)) + esc(ops[e][1].t); e++; }
+      const lead = sp(ops[k][1], k);
+      html += lead + (kind === "=" ? txt : kind === "-" ? `<del>${txt}</del>` : `<ins>${txt}</ins>`);
+      k = e;
+    }
+    return html;
+  }
   function renderPractice() {
     const intro = `<p class="meta">${T("prIntro")}</p>`, msg = pr.msg ? `<p class="addmsg">${esc(pr.msg)}</p>` : "";
     if (!pr.task) return `${intro}<div class="card pr">${msg}<button class="btn ok wide" data-act="prnew" ${pr.busy ? "disabled" : ""}>${pr.busy ? T("prBusy") : T("prStart")}</button></div>`;
@@ -707,7 +745,7 @@
       <textarea id="pa" class="prin" rows="3" dir="auto" autocapitalize="sentences" placeholder="${esc(T("prPh"))}" ${f ? "readonly" : ""}>${esc(pr.answer)}</textarea>
       ${msg}
       ${f ? `<div class="prfb">
-        <p class="prh">${f.correct ? T("prGood") : T("prCorrected")}</p><p class="de prde">${esc(f.corrected)}</p>
+        <p class="prh">${f.correct ? T("prGood") : T("prCorrected")}</p><p class="de prde" dir="ltr">${diffHTML(pr.answer, f.corrected || pr.answer)}</p>
         <p class="prh">${T("prNatural")}</p><div class="exrow"><p class="ex de">${esc(f.natural)}</p>${speakBtn("", T("sayEx")).replace('data-say=""', `data-t="${esc(f.natural)}"`)}</div>
         ${(f.tips || []).length ? `<p class="prh">${T("prTips")}</p><ul class="prtips">${f.tips.map(t => `<li dir="auto">${esc(t)}</li>`).join("")}</ul>` : ""}
         <p class="prh">${T("prUsed")}</p><p class="prused de">${pr.words.map(c => `<span class="${isUsed(c) ? "yes" : "no"}">${isUsed(c) ? "✓" : "✗"} ${esc(fullWord(c))}</span>`).join(" ")}</p>

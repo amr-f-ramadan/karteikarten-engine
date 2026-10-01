@@ -351,17 +351,19 @@ const toastOf = async (page, action) => {
     const prWords = await page.$$eval(".card.pr .famchip", els => els.length);
     check("Eman: practice shows the task in Arabic and two target words", prWords === 2 && (await page.textContent(".prtask")) === "قولي لصاحب الشقة إن الإيجار غالي عليكي.", prWords);
     await grab(page, "practice-task");
-    await page.fill("#pa", "Die Miete ist zu hoch");
+    await page.fill("#pa", "Die Miete sind zu hoch");
     const callsBefore = gem.calls.length;
     await page.goto(`${ORIGIN}/eman-deutsch/`); await sleep(1500);
     await tab(page, "practice");
     const kept = await page.evaluate(() => ({ task: document.querySelector(".prtask") && document.querySelector(".prtask").textContent, answer: document.querySelector("#pa") && document.querySelector("#pa").value, words: document.querySelectorAll(".card.pr .famchip").length }));
-    check("Eman: an unfinished exercise survives closing the app (task, words, typed answer)", kept.task === "قولي لصاحب الشقة إن الإيجار غالي عليكي." && kept.answer === "Die Miete ist zu hoch" && kept.words === 2 && gem.calls.length === callsBefore, kept);
+    check("Eman: an unfinished exercise survives closing the app (task, words, typed answer)", kept.task === "قولي لصاحب الشقة إن الإيجار غالي عليكي." && kept.answer === "Die Miete sind zu hoch" && kept.words === 2 && gem.calls.length === callsBefore, kept);
     await page.click('[data-act="prcheck"]');
     await page.waitForSelector(".prfb", { timeout: 8000 });
     const fbPrompt = gem.calls[gem.calls.length - 1].body.contents[0].parts[0].text;
-    check("Eman: her answer is sent for feedback", fbPrompt.includes('"Die Miete ist zu hoch"') && fbPrompt.includes("قولي لصاحب الشقة"), fbPrompt.slice(0, 300));
+    check("Eman: her answer is sent for feedback", fbPrompt.includes('"Die Miete sind zu hoch"') && fbPrompt.includes("قولي لصاحب الشقة"), fbPrompt.slice(0, 300));
     const fbView = await page.evaluate(() => ({ nat: document.querySelector(".prfb .ex").textContent, tips: document.querySelectorAll(".prtips li").length, chunks: document.querySelectorAll('.prfb [data-act="pradd"]').length, say: !!document.querySelector('.prfb .say[data-t]') }));
+    const marks = await page.evaluate(() => ({ html: document.querySelector(".prfb .prde").innerHTML, dir: document.querySelector(".prfb .prde").dir }));
+    check("Eman: her mistakes are crossed out with the correction right after them", marks.html === "Die Miete <del>sind</del> <ins>ist</ins> zu hoch<ins>.</ins>" && marks.dir === "ltr", marks);
     check("Eman: feedback shows natural version with play button, tip and phrase", fbView.nat === "Die Miete ist mir wirklich zu hoch." && fbView.tips === 1 && fbView.chunks === 1 && fbView.say, fbView);
     await page.screenshot({ path: SHOTS + "/light-9-practice.png", fullPage: true });
     await grab(page, "practice-feedback");
@@ -555,7 +557,7 @@ const toastOf = async (page, action) => {
   loadCards(emanCards).concat([{ w: "umziehen", hint: "zieht um, zog um, ist umgezogen", ex: "Wir ziehen nächsten Monat um", fam: "ziehen" }, { w: "die Miete" }]).forEach(c => Object.values(c).forEach(addWords));
   ["der", "die", "das", "GitHub", "Gemini", "token", "key", "API", "Google", "AI", "Studio", "Contents", "Read", "and", "write", "Fine", "grained", "repo", "github", "pat", "AIza", "umziehen", "Miete", "ICE"].forEach(w => allowed.add(w));
   // German sentences in the practice mock are content, not UI
-  ["Die Miete ist mir wirklich zu hoch", "Die Miete ist zu hoch", "Entschuldigung, aber"].forEach(addWords);
+  ["Die Miete ist mir wirklich zu hoch", "Die Miete ist zu hoch", "Die Miete sind zu hoch", "Entschuldigung, aber"].forEach(addWords);
   [PH_ONE].concat(PH_STARTER).forEach(c => Object.values(c).forEach(addWords));
   const cardWords = loadCards(emanCards).map(c => c.w).sort((a, b) => b.length - a.length);
   const leaks = [];
