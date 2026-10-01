@@ -179,6 +179,7 @@ const toastOf = async (page, action) => {
   if (CAPTURE) { const { run } = await runAmr("amr-capture"); fs.writeFileSync(FIX + "/amr-expected.sha256", hash(run) + "\n"); console.log("captured tests/fixtures/amr-expected.sha256"); }
   const want = fs.readFileSync(FIX + "/amr-expected.sha256", "utf8").trim();
   const { run: got, errors: amrErrors } = await runAmr("de-karteikarten");
+  if (process.env.DUMP_RUN) fs.writeFileSync(process.env.DUMP_RUN, JSON.stringify(got, null, 1));
   check("Amr: Gemini request, add form, article labels and saved card exactly as with his original engine", hash(got) === want, { formIds: got.formIds, savedLine: got.savedLine, promptStart: got.request && got.request.contents[0].parts[0].text.slice(0, 200) });
   check("Amr: no page errors", !amrErrors.length, amrErrors);
 
