@@ -15,7 +15,7 @@ The engine holds no personal data or settings: no texts, word lists, progress, c
 - `app.css`: glass design; colours, fonts and orb colours come from each app's `index.html`
 - `src/core/`: pure logic, no DOM, shared with the tools: `text` (keys, slugs, stems), `leitner` (boxes, due and new cards), `progress` (merge, prune), `store` (card list with indexes: words, phrases, nouns, families, lookups, search text), `prompt` (Gemini requests and answer shapes), `diff` (marked corrections), `cardsfile` (cards.js read/append/rewrite)
 - `src/services/`: browser I/O: `github` (contents API with ETag/304, progress branch, cards.js edits), `gemini` (text with model fallback, speech), `voice` (Gemini voice cache in IndexedDB with a size cap, device fallback), `push` (reminders), `sync` (progress sync), `local` (localStorage)
-- `src/ui/`: `dom` (helpers, hold, loading ring), `parts` (HTML building blocks), `router` (render, action registry: `data-act` → handler, inputs by id), `views/` one module per tab
+- `src/ui/`: `dom` (helpers, hold, loading ring), `parts` (HTML building blocks), `router` (render, `go(mode)`, action registry: `data-act` → handler, inputs by id), `dock` (the tab bar as a pill behind one knob: swipe or tap to switch views; the apps only supply their `<nav>` buttons), `views/` one module per tab
 - `src/session.js` (learning queue), `src/vocab.js` (new cards, phrases, deletion, waitlist worker), `src/state.js`, `src/main.js` (wiring)
 - `tools/remind.mjs`: daily reminder, run by each app's workflow from the app's folder; counts with `src/core`
 - `tools/pending.mjs`: creates cards for the waitlist on GitHub (not scheduled); prompts and ids from `src/core`
@@ -40,7 +40,7 @@ npm test          # build check, unit tests, browser suite
 
 CI runs the same on every push; a push whose `app.js` is not the build of `src/` fails the check.
 
-Adding a view: create `src/ui/views/<name>.js` exporting `create<Name>View(ctx)` → `{ mode, render, actions, change?, input?, keys?, enter?, after?, sayCard? }`, register it in `main.js`, add the tab button to each app's `index.html`. Actions are keyed by `data-act`; they receive the clicked element. Everything derived from the card list (families, topics, lookups) comes from `ctx.store`, which rebuilds its indexes after `push`, `remove` and `syncWith`.
+Adding a view: create `src/ui/views/<name>.js` exporting `create<Name>View(ctx)` → `{ mode, render, actions, change?, input?, keys?, enter?, after?, sayCard? }`, register it in `main.js`, add the tab button to each app's `index.html` (the dock picks it up by its `data-mode`). Actions are keyed by `data-act`; they receive the clicked element. Everything derived from the card list (families, topics, lookups) comes from `ctx.store`, which rebuilds its indexes after `push`, `remove` and `syncWith`.
 
 The browser suite needs both apps checked out next to this repo (or `AMR_DIR` / `EMAN_DIR`):
 

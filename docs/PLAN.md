@@ -99,6 +99,9 @@ pruned after 30 days; voice cache capped at 150 MB; the new-card prompt lists on
 Not changed, on purpose: `writeLocal` stays synchronous (iOS can end a home-screen app at any moment; a debounce
 could lose the last answer); `cards.js` stays a JS file (format change would touch both app repos and their history).
 
+Changed afterwards: the five-button tab bar became the lens dock (one knob, a pill that rises and is swiped; see
+`docs/superpowers/specs/2026-10-01-lens-dock-design.md`); the apps' `<nav>` markup stayed as it was.
+
 Resolved afterwards: the app's "today" for daily limits was the UTC date (`toISOString`) while the reminder tool
 used the phone's time zone, so between midnight and 02:00 local time the two disagreed by a day. Now both use
 `core/text.today(tz)`: the device's local date in the app, the zone from `push.json` in the reminder.
