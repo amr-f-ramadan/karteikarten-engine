@@ -12,6 +12,7 @@ import { createSession } from "./session.js";
 import { createVocab } from "./vocab.js";
 import { flash } from "./ui/dom.js";
 import { createRouter } from "./ui/router.js";
+import { createDock } from "./ui/dock.js";
 import { createLearnView } from "./ui/views/learn.js";
 import { createQuizView } from "./ui/views/quiz.js";
 import { createListView } from "./ui/views/list.js";
@@ -51,6 +52,7 @@ ctx.vocab = createVocab(ctx);
 
 const router = createRouter(ctx);
 ctx.go = mode => router.go(mode);
+ctx.dock = createDock(ctx, document.querySelector("nav"));
 [createLearnView, createQuizView, createListView, createPracticeView, createSettingsView].forEach(make => router.register(make(ctx)));
 
 /* Kein Zoomen: Pinch, Doppeltippen und Auto-Zoom in Eingabefeldern verhindern */

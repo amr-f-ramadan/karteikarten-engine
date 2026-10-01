@@ -103,12 +103,28 @@ button:focus-visible,.btn:focus-within,.card:focus-visible{outline:3px solid var
 .done .big{font-size:1.5rem;font-weight:800;margin:0 0 6px}
 .done p{color:var(--muted)}
 
-/* Schwebende Tab-Leiste */
-nav{position:fixed;left:0;right:0;margin:0 auto;bottom:max(10px,calc(env(safe-area-inset-bottom,0px) - 14px));width:min(94%,520px);border-radius:28px;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;padding:6px;z-index:5}
-nav button{all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0 7px;border-radius:22px;font-size:.68rem;font-weight:600;color:var(--muted);position:relative;transition:background .2s,color .2s}
-nav button[aria-current=page]{color:var(--accent);background:var(--glass-strong)}
-nav button:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
-#badge{position:absolute;top:2px;inset-inline-start:calc(50% + 6px);background:var(--again);color:#fff;border-radius:999px;font-size:.62rem;padding:0 6px;line-height:1.5;font-weight:700}
+/* Dock: die Tab-Leiste ist eine Pille, die aus dem Knopf unten in der Mitte aufsteigt; die Knöpfe werden vom Dock
+   Bild für Bild verschoben (transform), die Linse ist nav::before. touch-action none: der Browser nimmt die Geste nicht. */
+nav{position:fixed;left:0;right:0;margin:0 auto;bottom:max(16px,calc(env(safe-area-inset-bottom,0px) + 4px));width:min(92%,360px);height:72px;border-radius:36px;overflow:hidden;z-index:5;touch-action:none;
+  transform:translateY(110px);opacity:0;pointer-events:none;transition:transform .4s cubic-bezier(.2,1,.3,1),opacity .25s}
+nav.open{transform:none;opacity:1;pointer-events:auto}
+nav::before{content:"";position:absolute;top:4px;bottom:4px;left:50%;width:80px;margin-left:-40px;border-radius:999px;pointer-events:none;
+  background:radial-gradient(circle at 50% 30%,color-mix(in srgb,var(--accent) 30%,transparent),transparent 72%),var(--glass-strong);box-shadow:inset 0 1px 0 var(--shine),0 6px 18px -8px var(--shadow)}
+nav button{all:unset;cursor:pointer;position:absolute;top:0;height:100%;left:50%;width:72px;margin-left:-36px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:.66rem;font-weight:600;color:var(--muted);white-space:nowrap;will-change:transform;-webkit-tap-highlight-color:transparent}
+nav button.on{color:var(--accent)}
+nav button .lbl{transition:opacity .2s}
+nav button:not(.on) .lbl{opacity:0}
+nav button:focus-visible{outline:3px solid var(--accent);outline-offset:-3px;border-radius:22px}
+/* Die Pille schneidet ihre Ränder ab: die Zahl sitzt auf der Schulter des Symbols, nicht darüber */
+#badge{position:absolute;top:8px;inset-inline-start:calc(50% + 10px);background:var(--again);color:#fff;border-radius:999px;font-size:.62rem;padding:0 6px;line-height:1.5;font-weight:700}
+.knob{all:unset;cursor:pointer;position:fixed;left:50%;bottom:max(22px,calc(env(safe-area-inset-bottom,0px) + 10px));width:58px;height:58px;margin-left:-29px;border-radius:50%;display:grid;place-items:center;color:var(--accent);z-index:6;-webkit-tap-highlight-color:transparent;
+  background:radial-gradient(circle at 50% 30%,color-mix(in srgb,var(--accent) 30%,transparent),transparent 72%),var(--glass-strong);border:1px solid var(--rim);box-shadow:inset 0 1px 0 var(--shine),0 10px 30px -12px var(--shadow);
+  -webkit-backdrop-filter:blur(24px) saturate(170%);backdrop-filter:blur(24px) saturate(170%);transition:transform .4s cubic-bezier(.2,1,.3,1),opacity .22s}
+.knob svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.knob .kbadge{position:absolute;top:4px;inset-inline-end:2px;background:var(--again);color:#fff;border-radius:999px;font-size:.6rem;padding:0 5px;line-height:1.5;font-weight:700}
+.knob:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+body.dock-open .knob{transform:scale(1.45);opacity:0;pointer-events:none}
+@media (prefers-reduced-motion:reduce){nav,nav button .lbl,.knob{transition:none}}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + max(10px,calc(env(safe-area-inset-bottom,0px) - 14px)));color:var(--ink);padding:11px 16px;border-radius:16px;font-size:.9rem;z-index:6;max-width:90%}
 @media (prefers-reduced-motion:reduce){.btn{transition:none}}
 

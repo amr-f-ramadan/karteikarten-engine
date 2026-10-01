@@ -10,9 +10,8 @@ export function createRouter(ctx) {
   const current = () => views[S.mode] || views.settings;
 
   function render() {
-    document.querySelectorAll("nav button").forEach(b => b.setAttribute("aria-current", b.dataset.mode === S.mode ? "page" : "false"));
     const st = ctx.session.count(), dueN = st.due + st.fresh;
-    const bd = $("#badge"); if (bd) { bd.textContent = dueN; bd.hidden = !dueN; }
+    ctx.dock.refresh(dueN);
     ctx.badge(dueN);
     const v = current();
     $("#main").innerHTML = v.render();
@@ -28,8 +27,6 @@ export function createRouter(ctx) {
   }
 
   document.addEventListener("click", e => {
-    const nb = e.target.closest("nav button");
-    if (nb) { go(nb.dataset.mode); return; }
     if (isHolding() && e.target.closest("#main")) { e.preventDefault(); e.stopPropagation(); return; }
     const say = e.target.closest(".say");
     if (say && say.dataset.t) { e.stopPropagation(); ctx.voice.speak(say.dataset.t, say); return; }

@@ -1,0 +1,105 @@
+// Dock: die Tab-Leiste ist eine Pille hinter einem runden Knopf unten in der Mitte. Der Knopf zeigt die aktuelle
+// Ansicht und die fälligen Karten; ein Tipp hebt die Pille, Wischen dreht die Ansichten ohne Ende, ein Tipp wählt,
+// danach sinkt die Pille wieder. Die Apps liefern nur ihre nav-Knöpfe (Symbol, Text, #badge).
+import { nearestTurn, settleTarget, glideDuration } from "../core/dock.js";
+
+const SLOT = 72, TAP_PX = 6, IDLE_MS = 3500;
+
+export function createDock(ctx, nav) {
+  const { S } = ctx;
+  const items = [...nav.querySelectorAll("button[data-mode]")], N = items.length;
+  if (!N) return { refresh() {} };
+  // Der Text in den Knöpfen der Apps ist nackt; nur der mittlere Knopf zeigt ihn, dafür braucht er ein Element
+  items.forEach(b => [...b.childNodes].forEach(n => {
+    if (n.nodeType !== 3 || !n.textContent.trim()) return;
+    const s = document.createElement("span"); s.className = "lbl"; s.textContent = n.textContent.trim(); b.replaceChild(s, n);
+  }));
+  const knob = document.createElement("button");
+  knob.className = "knob"; knob.setAttribute("aria-expanded", "false");
+  knob.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"></svg><span class="kbadge" hidden></span>';
+  nav.after(knob); nav.setAttribute("aria-hidden", "true");
+
+  const mod = i => ((i % N) + N) % N;
+  const dir = () => (getComputedStyle(nav).direction === "rtl" ? -1 : 1);
+  const current = () => Math.max(0, items.findIndex(b => b.dataset.mode === S.mode));
+  let pos = current(), anim = null, idleT = null, closeT = null;
+  let active = false, startX = 0, startPos = 0, moved = false, lastX = 0, lastT = 0, vel = 0, lastRelease = 0;
+
+  function place() {
+    const on = mod(Math.round(pos));
+    items.forEach((b, i) => {
+      const d = nearestTurn(i - pos, N), s = Math.max(0.8, 1.25 - Math.abs(d) * 0.35);
+      b.style.transform = `translate(${(d * SLOT * dir()).toFixed(1)}px, ${i === on ? -3 : 0}px) scale(${s.toFixed(3)})`;
+      b.style.opacity = Math.abs(d) > 2.6 ? 0 : 1;
+      b.classList.toggle("on", i === on);
+    });
+  }
+  const stopGlide = () => { if (anim) cancelAnimationFrame(anim); anim = null; };
+  /* Nach dem Loslassen gleitet die Reihe Bild für Bild, dieselbe Bewegung wie beim Wischen: nichts springt */
+  function glideTo(target) {
+    stopGlide();
+    const from = pos, dist = target - from, dur = glideDuration(dist), t0 = performance.now();
+    const step = now => {
+      const k = Math.min(1, (now - t0) / dur);
+      pos = from + dist * (1 - Math.pow(1 - k, 3)); place();
+      if (k < 1) anim = requestAnimationFrame(step); else { anim = null; pos = target; place(); }
+    };
+    anim = requestAnimationFrame(step);
+  }
+  const idle = () => { clearTimeout(idleT); idleT = setTimeout(() => setOpen(false), IDLE_MS); };
+  function setOpen(open) {
+    clearTimeout(idleT); clearTimeout(closeT);
+    nav.classList.toggle("open", open); nav.setAttribute("aria-hidden", String(!open));
+    knob.setAttribute("aria-expanded", String(open)); document.body.classList.toggle("dock-open", open);
+    if (open) { stopGlide(); pos = current(); place(); idle(); }
+  }
+  function pick(target, how) {
+    glideTo(target);
+    ctx.go(items[mod(target)].dataset.mode);
+    clearTimeout(idleT); clearTimeout(closeT); closeT = setTimeout(() => setOpen(false), how === "tap" ? 240 : 520);
+  }
+
+  nav.addEventListener("pointerdown", e => {
+    stopGlide(); active = true; moved = false; vel = 0;
+    try { nav.setPointerCapture(e.pointerId); } catch (x) {}
+    startX = lastX = e.clientX; startPos = pos; lastT = performance.now(); idle();
+  });
+  nav.addEventListener("pointermove", e => {
+    if (!active) return;
+    const dx = e.clientX - startX, now = performance.now();
+    if (Math.abs(dx) > TAP_PX) moved = true;
+    if (now > lastT) vel = (e.clientX - lastX) / (now - lastT);
+    lastX = e.clientX; lastT = now;
+    pos = startPos - dx * dir() / SLOT; place();
+  });
+  // Mit Pointer Capture landen alle Ereignisse auf der nav, darum wird der getippte Knopf unter dem Finger gesucht
+  const itemAt = e => { const el = document.elementFromPoint(e.clientX, e.clientY), b = el && el.closest("button[data-mode]"); return b && items.includes(b) ? b : null; };
+  /* Auch ein abgebrochener Touch (der Browser nahm die Geste) landet auf einem Symbol, nie dazwischen */
+  function release(e) {
+    if (!active) return; active = false; lastRelease = performance.now();
+    if (lastRelease - lastT > 80) vel = 0; // Pause vor dem Loslassen: kein Schnipp
+    const tapped = !moved && e.type === "pointerup" ? itemAt(e) : null;
+    if (tapped) pick(Math.round(pos) + nearestTurn(items.indexOf(tapped) - pos, N), "tap");
+    else pick(settleTarget(pos, vel, 1 / SLOT, dir()), moved ? "swipe" : "tap");
+  }
+  ["pointerup", "pointercancel", "lostpointercapture"].forEach(t => nav.addEventListener(t, release));
+  /* Tastatur (Enter auf einem Knopf) und ein Touch, den der Browser anders beendet: der Klick wählt trotzdem */
+  nav.addEventListener("click", e => {
+    if (performance.now() - lastRelease < 120) return;
+    const b = e.target.closest("button[data-mode]"); if (!b) return;
+    active = false; pick(Math.round(pos) + nearestTurn(items.indexOf(b) - pos, N), "tap");
+  });
+  knob.addEventListener("click", () => setOpen(true));
+
+  /* Nach jedem Zeichnen: aktive Ansicht markieren, Zahl in Leiste und Knopf, Symbol und Name der Ansicht auf dem Knopf */
+  function refresh(dueN) {
+    const cur = items[current()];
+    items.forEach(b => b.setAttribute("aria-current", b === cur ? "page" : "false"));
+    const bd = document.getElementById("badge"); if (bd) { bd.textContent = dueN; bd.hidden = !dueN; }
+    const kb = knob.querySelector(".kbadge"); kb.textContent = dueN; kb.hidden = !dueN;
+    const svg = cur.querySelector("svg"); if (svg) knob.replaceChild(svg.cloneNode(true), knob.querySelector("svg"));
+    const lbl = cur.querySelector(".lbl"); knob.setAttribute("aria-label", lbl ? lbl.textContent : cur.dataset.mode);
+  }
+  place();
+  return { refresh };
+}
