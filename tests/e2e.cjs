@@ -137,6 +137,25 @@ async function newPage(browser, { storage = {}, dark = false, standalone = false
 }
 // The views sit in a pill behind the knob: open it, tap the view, wait until the pill has sunk again
 const navOpen = page => page.evaluate(() => document.querySelector("nav").classList.contains("open"));
+// A click that, when its selector never resolves, says whether the page's script thread is alive, whether the element exists
+// (asked over CDP, without script) and where the script is stuck, instead of only "waiting for locator"
+const clickOrDiagnose = async (page, sel) => {
+  try { await page.click(sel, { timeout: 8000 }); }
+  catch (e) {
+    const alive = await Promise.race([page.evaluate(() => "alive").catch(x => "evaluate: " + x.message), sleep(2000).then(() => "hung")]);
+    let dom = "?", stack = "";
+    try {
+      const cdp = await page.context().newCDPSession(page), doc = await cdp.send("DOM.getDocument", { depth: 0 });
+      dom = JSON.stringify(await cdp.send("DOM.querySelector", { nodeId: doc.root.nodeId, selector: sel }));
+      if (alive === "hung") {
+        await cdp.send("Debugger.enable"); const paused = new Promise(res => cdp.once("Debugger.paused", res)); await cdp.send("Debugger.pause");
+        const p = await Promise.race([paused, sleep(3000)]);
+        if (p) stack = p.callFrames.slice(0, 10).map(f => `${f.functionName || "(anon)"} ${f.url.split("/").pop()}:${f.location.lineNumber + 1}:${f.location.columnNumber + 1}`).join(" < ");
+      }
+    } catch (x) { dom = "cdp: " + x.message; }
+    throw new Error(`${e.message.split("\n")[0]} | script thread: ${alive} | element: ${dom} | stack: ${stack}`);
+  }
+};
 const tab = async (page, mode) => {
   await page.click(".knob"); await page.waitForFunction(() => document.querySelector("nav").classList.contains("open"));
   await page.click(`nav button[data-mode=${mode}]`);
@@ -634,11 +653,11 @@ const toastOf = async (page, action) => {
     await page.click('.arts [data-g="der"]'); await page.waitForSelector(".arts .right", { timeout: 5000 }); await sleep(300);
     const qHold = await page.evaluate(() => ({ hold: document.body.classList.contains("hold"), ring: !!document.querySelector(".card.quiz .say.loading"), dim: getComputedStyle(document.querySelector('[data-act="nextq"]')).opacity }));
     await page.screenshot({ path: SHOTS + "/voice-quiz-hold.png", clip: { x: 0, y: 60, width: 390, height: 560 } });
-    await page.click('[data-act="nextq"]'); await sleep(100);
+    await clickOrDiagnose(page, '[data-act="nextq"]'); await sleep(100);
     const qSame = (await page.textContent(".card.quiz .word")).includes(qWord.replace("___", "").trim());
     await freeOf(); gem.ttsDelay = 0;
     const qFree = await page.evaluate(() => !document.body.classList.contains("hold") && !document.querySelector(".loading"));
-    await page.click('[data-act="nextq"]'); await sleep(200);
+    await clickOrDiagnose(page, '[data-act="nextq"]'); await sleep(200);
     const qNext = !!(await page.$(".arts .btn:not(.right):not(.wrong):not(.fade)"));
     check("Voice: quiz shows the ring and blocks 'next' until the word's voice is ready", qHold.hold && qHold.ring && Number(qHold.dim) < 0.6 && qSame && qFree && qNext, { qHold, qSame, qFree, qNext });
     await tab(page, "learn");
