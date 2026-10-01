@@ -666,8 +666,9 @@
   }
   const PR_TASK = { type: "OBJECT", properties: { task: { type: "STRING" }, starter: { type: "STRING" } }, required: ["task", "starter"] };
   const LIST = { type: "ARRAY", items: { type: "STRING" } };
-  const PR_FB = { type: "OBJECT", properties: { correct: { type: "BOOLEAN" }, corrected: { type: "STRING" }, natural: { type: "STRING" }, tips: LIST, used: LIST, chunks: LIST },
-    required: ["correct", "corrected", "natural", "tips", "used", "chunks"] };
+  const EDITS = { type: "ARRAY", items: { type: "OBJECT", properties: { wrong: { type: "STRING" }, right: { type: "STRING" }, kind: { type: "STRING", enum: ["error", "style"] } }, required: ["wrong", "right", "kind"] } };
+  const PR_FB = { type: "OBJECT", properties: { correct: { type: "BOOLEAN" }, corrected: { type: "STRING" }, natural: { type: "STRING" }, tips: LIST, used: LIST, chunks: LIST, edits: EDITS },
+    required: ["correct", "corrected", "natural", "tips", "used", "chunks", "edits"] };
   const fill = (tpl, v) => tpl.replace(/\{(\w+)\}/g, (m, k) => (v[k] !== undefined ? v[k] : m));
   const pickOne = a => a[Math.floor(Math.random() * a.length)];
   function pickWords() {
@@ -703,7 +704,7 @@
     if (out.length) out[0].sp = false;
     return out;
   }
-  function diffHTML(a, b) {
+  function diffHTML(a, b, edits, kinds = new Set()) {
     const x = tokens(a), y = tokens(b), n = x.length, m = y.length;
     const L = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
     for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = x[i].t === y[j].t ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
@@ -721,13 +722,36 @@
       k = e;
     }
     const sp = (tk, k) => (k > 0 && tk.sp ? " " : "");
+    const join = list => list.map((o, i) => (i ? sp(o[1], 1) : "") + o[1].t).join("");
+    // Art der Änderung aus Geminis Liste: "error" (Fehler) oder "style" (klingt nur besser); ohne Treffer gilt sie als Fehler
+    const key = t => String(t || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+    const hit = (a, b) => !!a && !!b && (a === b || a.includes(b) || b.includes(a));
+    const kindOf = (del, ins) => {
+      const d = key(del), n = key(ins);
+      const e = (edits || []).find(x => (d && hit(key(x.wrong), d)) || (n && hit(key(x.right), n)));
+      return e && e.kind === "style" ? "sty" : "err";
+    };
     let html = "", k = 0;
     while (k < ops.length) {
-      const kind = ops[k][0];
-      let e = k, txt = "";
-      while (e < ops.length && ops[e][0] === kind) { txt += (e === k ? "" : sp(ops[e][1], 1)) + esc(ops[e][1].t); e++; }
       const lead = sp(ops[k][1], k);
-      html += lead + (kind === "=" ? txt : kind === "-" ? `<del>${txt}</del>` : `<ins>${txt}</ins>`);
+      if (ops[k][0] === "=") {
+        let e = k; while (e < ops.length && ops[e][0] === "=") e++;
+        html += lead + esc(join(ops.slice(k, e))); k = e; continue;
+      }
+      let e = k; while (e < ops.length && ops[e][0] !== "=") e++;
+      const run = ops.slice(k, e), dels = run.filter(o => o[0] === "-"), inss = run.filter(o => o[0] === "+");
+      const base = kindOf(join(dels), join(inss));
+      // jedes Wort einzeln zuordnen, damit Fehler und Verbesserung nebeneinander verschieden aussehen
+      const wordKind = (t, field) => { const w = key(t); if (!w) return base; const x = (edits || []).find(z => key(z[field]).split(" ").includes(w)); return x ? (x.kind === "style" ? "sty" : "err") : base; };
+      const part = (list, tag, field) => {
+        let out = "", i = 0;
+        while (i < list.length) {
+          const c = wordKind(list[i][1].t, field); let j = i; while (j < list.length && wordKind(list[j][1].t, field) === c) j++;
+          kinds.add(c); out += (i ? (list[i][1].sp ? " " : "") : "") + `<${tag} class="${c}">${esc(join(list.slice(i, j)))}</${tag}>`; i = j;
+        }
+        return out;
+      };
+      html += lead + part(dels, "del", "wrong") + (dels.length && inss.length ? (inss[0][1].sp ? " " : "") : "") + part(inss, "ins", "right");
       k = e;
     }
     return html;
@@ -736,7 +760,7 @@
     const intro = `<p class="meta">${T("prIntro")}</p>`, msg = pr.msg ? `<p class="addmsg">${esc(pr.msg)}</p>` : "";
     if (!pr.task) return `${intro}<div class="card pr">${msg}<button class="btn ok wide" data-act="prnew" ${pr.busy ? "disabled" : ""}>${pr.busy ? T("prBusy") : T("prStart")}</button></div>`;
     const chip = c => `<button class="famchip de ${gClass(c)}" data-act="sayt" data-t="${esc(fullWord(c))}">${ART[c.g] ? `<span class="art">${ART[c.g]}</span> ` : ""}${esc(c.w)}</button>`;
-    const f = pr.fb, used = f ? (f.used || []).map(norm) : [];
+    const f = pr.fb, used = f ? (f.used || []).map(norm) : [], kinds = new Set();
     const isUsed = c => used.some(u => u && (u.includes(norm(c.w)) || norm(c.w).includes(u)));
     return `${intro}<div class="card pr">
       <p class="prh">${T("prWords")}</p><div class="famrow">${pr.words.map(chip).join("")}</div>
@@ -745,7 +769,8 @@
       <textarea id="pa" class="prin" rows="3" dir="auto" autocapitalize="sentences" placeholder="${esc(T("prPh"))}" ${f ? "readonly" : ""}>${esc(pr.answer)}</textarea>
       ${msg}
       ${f ? `<div class="prfb">
-        <p class="prh">${f.correct ? T("prGood") : T("prCorrected")}</p><p class="de prde" dir="ltr">${diffHTML(pr.answer, f.corrected || pr.answer)}</p>
+        <p class="prh">${f.correct ? T("prGood") : T("prCorrected")}</p><p class="de prde" dir="ltr">${diffHTML(pr.answer, f.corrected || pr.answer, f.edits, kinds)}</p>
+        ${kinds.size ? `<p class="prkey">${kinds.has("err") ? `<span class="err">${T("prErr")}</span>` : ""}${kinds.has("sty") ? `<span class="sty">${T("prSty")}</span>` : ""}</p>` : ""}
         <p class="prh">${T("prNatural")}</p><div class="exrow"><p class="ex de">${esc(f.natural)}</p>${speakBtn("", T("sayEx")).replace('data-say=""', `data-t="${esc(f.natural)}"`)}</div>
         ${(f.tips || []).length ? `<p class="prh">${T("prTips")}</p><ul class="prtips">${f.tips.map(t => `<li dir="auto">${esc(t)}</li>`).join("")}</ul>` : ""}
         <p class="prh">${T("prUsed")}</p><p class="prused de">${pr.words.map(c => `<span class="${isUsed(c) ? "yes" : "no"}">${isUsed(c) ? "✓" : "✗"} ${esc(fullWord(c))}</span>`).join(" ")}</p>

@@ -340,7 +340,7 @@ const toastOf = async (page, action) => {
     // Speaking practice: Gemini gives a situation, checks the answer, phrases can become cards
     gem.mode = "ok";
     gem.card = body => body.contents[0].parts[0].text.includes("Antwort der Schülerin")
-      ? { correct: false, corrected: "Die Miete ist zu hoch.", natural: "Die Miete ist mir wirklich zu hoch.", tips: ["خدي بالك: Miete اسم مؤنث"], used: ["hoch"], chunks: ["mir wirklich zu hoch"] }
+      ? { correct: false, corrected: "Die Miete ist wirklich zu hoch.", natural: "Die Miete ist mir wirklich zu hoch.", tips: ["خدي بالك: Miete اسم مؤنث"], used: ["hoch"], chunks: ["mir wirklich zu hoch"], edits: [{ wrong: "sind", right: "ist", kind: "error" }, { wrong: "", right: "wirklich", kind: "style" }, { wrong: "", right: ".", kind: "error" }] }
       : { task: "قولي لصاحب الشقة إن الإيجار غالي عليكي.", starter: "Entschuldigung, aber" };
     await tab(page, "practice");
     await grab(page, "practice-start");
@@ -363,13 +363,15 @@ const toastOf = async (page, action) => {
     check("Eman: her answer is sent for feedback", fbPrompt.includes('"Die Miete sind zu hoch"') && fbPrompt.includes("قولي لصاحب الشقة"), fbPrompt.slice(0, 300));
     const fbView = await page.evaluate(() => ({ nat: document.querySelector(".prfb .ex").textContent, tips: document.querySelectorAll(".prtips li").length, chunks: document.querySelectorAll('.prfb [data-act="pradd"]').length, say: !!document.querySelector('.prfb .say[data-t]') }));
     const marks = await page.evaluate(() => ({ html: document.querySelector(".prfb .prde").innerHTML, dir: document.querySelector(".prfb .prde").dir }));
-    check("Eman: her mistakes are crossed out with the correction right after them", marks.html === "Die Miete <del>sind</del> <ins>ist</ins> zu hoch<ins>.</ins>" && marks.dir === "ltr", marks);
+    const fbSchema = gem.calls[gem.calls.length - 1].body.generationConfig.responseSchema, fbText = gem.calls[gem.calls.length - 1].body.contents[0].parts[0].text;
+    const legend = await page.evaluate(() => [...document.querySelectorAll(".prkey span")].map(e => e.className + ":" + e.textContent));
+    check("Eman: errors and improvements are marked differently, with an Arabic legend", marks.html === 'Die Miete <del class="err">sind</del> <ins class="err">ist</ins> <ins class="sty">wirklich</ins> zu hoch<ins class="err">.</ins>' && marks.dir === "ltr" && JSON.stringify(legend) === JSON.stringify(["err:غلط", "sty:صياغة أحسن"]) && JSON.stringify(fbSchema.properties.edits.items.properties.kind.enum) === '["error","style"]' && /- edits: .*ihrer Antwort/.test(fbText), { marks, legend });
     check("Eman: feedback shows natural version with play button, tip and phrase", fbView.nat === "Die Miete ist mir wirklich zu hoch." && fbView.tips === 1 && fbView.chunks === 1 && fbView.say, fbView);
     await page.screenshot({ path: SHOTS + "/light-9-practice.png", fullPage: true });
     await grab(page, "practice-feedback");
     const ptext = body => body.contents[0].parts[0].text;
     gem.card = body => ptext(body).includes("Antwort der Schülerin")
-      ? { correct: false, corrected: "Die Miete ist zu hoch.", natural: "Die Miete ist mir wirklich zu hoch.", tips: ["خدي بالك: Miete اسم مؤنث"], used: ["hoch"], chunks: ["mir wirklich zu hoch"] }
+      ? { correct: false, corrected: "Die Miete ist wirklich zu hoch.", natural: "Die Miete ist mir wirklich zu hoch.", tips: ["خدي بالك: Miete اسم مؤنث"], used: ["hoch"], chunks: ["mir wirklich zu hoch"], edits: [{ wrong: "sind", right: "ist", kind: "error" }, { wrong: "", right: "wirklich", kind: "style" }, { wrong: "", right: ".", kind: "error" }] }
       : ptext(body).includes("Grundstock") ? PH_STARTER : ptext(body).includes("Wendung oder Ausdruck") ? PH_ONE
       : { task: "قولي لصاحب الشقة إن الإيجار غالي عليكي.", starter: "Entschuldigung, aber" };
     const cardPuts = () => gh.log.filter(e => e.method === "PUT" && e.path.endsWith("/cards.js"));
@@ -557,7 +559,7 @@ const toastOf = async (page, action) => {
   loadCards(emanCards).concat([{ w: "umziehen", hint: "zieht um, zog um, ist umgezogen", ex: "Wir ziehen nächsten Monat um", fam: "ziehen" }, { w: "die Miete" }]).forEach(c => Object.values(c).forEach(addWords));
   ["der", "die", "das", "GitHub", "Gemini", "token", "key", "API", "Google", "AI", "Studio", "Contents", "Read", "and", "write", "Fine", "grained", "repo", "github", "pat", "AIza", "umziehen", "Miete", "ICE"].forEach(w => allowed.add(w));
   // German sentences in the practice mock are content, not UI
-  ["Die Miete ist mir wirklich zu hoch", "Die Miete ist zu hoch", "Die Miete sind zu hoch", "Entschuldigung, aber"].forEach(addWords);
+  ["Die Miete ist mir wirklich zu hoch", "Die Miete ist zu hoch", "Die Miete sind zu hoch", "Die Miete ist wirklich zu hoch", "Entschuldigung, aber"].forEach(addWords);
   [PH_ONE].concat(PH_STARTER).forEach(c => Object.values(c).forEach(addWords));
   const cardWords = loadCards(emanCards).map(c => c.w).sort((a, b) => b.length - a.length);
   const leaks = [];

@@ -180,3 +180,12 @@ nav button:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
 /* Korrekturen in der Übung: falsch durchgestrichen, richtig hervorgehoben */
 .prde del{color:var(--again);text-decoration:line-through;text-decoration-thickness:2px;opacity:.9}
 .prde ins{text-decoration:none;font-weight:700;color:var(--ok);background:color-mix(in srgb,var(--ok) 20%,transparent);border-radius:6px;padding:0 3px}
+/* nur besser formuliert: grau durchgestrichen, Verbesserung in der Akzentfarbe */
+.prde del.sty{color:var(--muted);opacity:1}
+.prde ins.sty{color:var(--sty,#2F6FD0);background:color-mix(in srgb,var(--sty,#2F6FD0) 16%,transparent)}
+.prkey{display:flex;gap:14px;flex-wrap:wrap;margin:2px 0 0;font-size:.8rem;color:var(--muted)}
+.prkey span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:3px;margin-inline-end:6px;vertical-align:-1px}
+.prkey .err::before{background:var(--again)}
+.prkey .sty::before{background:var(--sty,#2F6FD0)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--sty:#8AB4FF}}
+:root[data-theme="dark"]{--sty:#8AB4FF}
