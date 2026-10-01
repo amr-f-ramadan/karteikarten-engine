@@ -43,5 +43,8 @@ export function createSession(ctx) {
     L.queue = L.queue.filter(x => x.id !== id);
     if (L.cur && L.cur.id === id) { L.cur = L.queue.shift() || null; L.flipped = false; }
   }
-  return { limits, due, fresh, buildQueue, next, ensureCur, restart, refill, answer, flip, drop, dueCount: () => due().length + fresh().length };
+  /* Zahlen für eine Zeichnung: einmal berechnet, von Router und Lernansicht gelesen */
+  const stats = { due: 0, fresh: 0 };
+  function count() { stats.due = due().length; stats.fresh = fresh().length; return stats; }
+  return { limits, due, fresh, buildQueue, next, ensureCur, restart, refill, answer, flip, drop, count, stats };
 }

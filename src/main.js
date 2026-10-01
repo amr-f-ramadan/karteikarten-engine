@@ -1,5 +1,5 @@
 // Einstieg: Einstellungen der App (window.APP) und Karten (window.CARDS) nehmen, Dienste verdrahten, erste Ansicht zeichnen.
-import { emptyP, optOf } from "./core/progress.js";
+import { emptyP, optOf, prune } from "./core/progress.js";
 import { CardStore } from "./core/store.js";
 import { createState } from "./state.js";
 import { createLocal } from "./services/local.js";
@@ -29,7 +29,7 @@ function loadP() {
   if (C.migrate) try { C.migrate(p); } catch (e) {}
   return p;
 }
-const S = createState(loadP());
+const S = createState(prune(loadP()));
 S.sync.token = local.get(local.key("token")) || "";
 S.gkey = local.get(local.key("gemini")) || "";
 const store = new CardStore(window.CARDS);

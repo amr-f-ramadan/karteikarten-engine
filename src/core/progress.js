@@ -17,4 +17,11 @@ export function merge(a, b) {
   return o;
 }
 
+/* Erledigte Wartelisten-Einträge älter als 30 Tage entfernen; gibt P zurück */
+export function prune(P, now = Date.now()) {
+  const pend = P.pending || {};
+  for (const k of Object.keys(pend)) if (pend[k].done && pend[k].t < now - 30 * 864e5) delete pend[k];
+  return P;
+}
+
 export const optOf = (P, k, d) => (P.opts && P.opts[k] !== undefined ? P.opts[k] : d);

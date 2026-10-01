@@ -6,7 +6,7 @@ import { $, hold, SLOW_MS } from "../dom.js";
 import { dots, field, topicSection, searchBox, waitChips, exRow, arLine, trLine, noteBox } from "../parts.js";
 import { emptyAdd } from "../../state.js";
 
-export function createPhrasesPart(ctx) {
+export function createPhrasesPart(ctx, list) {
   const { S, T, C, store, vocab, session, flash } = ctx, PH = C.phrases;
   const gemErr = e => (e.message === "key" ? T("keyBad") : null);
 
@@ -81,7 +81,8 @@ export function createPhrasesPart(ctx) {
         <span class="de word">${esc(c.w)}</span>${dots(boxOf(S.P, c), T)}</button>
         ${open ? `<div class="detail">${arLine(c.ar)}${exRow(c.ex, T("sayEx"))}${trLine(c.tr)}${noteBox(c.note)}<div class="row2"><button class="btn" data-act="sayt" data-t="${esc(c.w.replace(/…/g, ""))}">${T("phSay")}</button><button class="btn again" data-act="del" data-id="${c.id}">${T("delCard")}</button></div></div>` : ""}</li>`);
     });
-    const secs = [...groups.entries()].map(([t, rows]) => topicSection(t, rows)).join("");
+    const closed = all.length > list.COLLAPSE_AT ? list.closedSet("p", [...groups.keys()]) : null;
+    const secs = [...groups.entries()].map(([t, rows]) => topicSection(t, rows, closed ? closed.has(t) : null)).join("");
     return `${renderAdd()}${all.length ? searchBox(S.list.query, T) + `<p class="meta">${T("phStat").replace("{a}", learnedCount(all, S.P)).replace("{t}", all.length)}</p>` : ""}${secs}<p id="nohits" class="meta dim" hidden>${T("noHits")}</p>`;
   }
   return {

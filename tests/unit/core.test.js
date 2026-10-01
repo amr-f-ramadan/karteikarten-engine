@@ -3,11 +3,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { slug, sameStem, topicOf, norm, pk, pkey, fullWord, fill } from "../../src/core/text.js";
 import { INT, recordAnswer, freshCards, dueCards, newToday, allowMoreNew, boxOf } from "../../src/core/leitner.js";
-import { emptyP, merge } from "../../src/core/progress.js";
+import { emptyP, merge, prune } from "../../src/core/progress.js";
 import { CardStore } from "../../src/core/store.js";
 import { cardPrompt, cardSchema, phrasePrompt, starterPrompt } from "../../src/core/prompt.js";
 import { diffHTML } from "../../src/core/diff.js";
-import { parseCards, serializeCards, appendCards } from "../../src/services/github.js";
+import { parseCards, serializeCards, appendCards } from "../../src/core/cardsfile.js";
 
 const DAY = 864e5, day = "2026-10-01";
 const cards = () => [
@@ -120,4 +120,19 @@ test("cards.js: append keeps the file byte for byte, remove rewrites one line pe
   assert.deepEqual(parseCards(out).map(c => c.id), ["blick", "neu"]);
   assert.equal(serializeCards("// head\n", parseCards(out).filter(c => c.id !== "blick")), "// head\nwindow.CARDS = [\n " + JSON.stringify(added) + "\n];\n");
   assert.throws(() => appendCards("nope", []), /format/);
+});
+
+test("store: only families with a matching stem go into the prompt", () => {
+  const st = new CardStore(cards());
+  assert.equal(st.famListFor("Einblick"), "blick");
+  assert.equal(st.famListFor("ziehen"), "ziehen");
+  assert.equal(st.famListFor("Haus"), "keine");
+  assert.equal(st.famListFor("شقة"), "keine");
+});
+
+test("progress: done waitlist entries older than 30 days are pruned", () => {
+  const P = emptyP(), now = 100 * 864e5;
+  P.pending = { old: { w: "old", t: now - 31 * 864e5, done: true }, fresh: { w: "fresh", t: now - 29 * 864e5, done: true }, open: { w: "open", t: now - 90 * 864e5 } };
+  prune(P, now);
+  assert.deepEqual(Object.keys(P.pending), ["fresh", "open"]);
 });

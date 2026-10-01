@@ -2,33 +2,34 @@
 export const b64enc = s => btoa(unescape(encodeURIComponent(s)));
 export const b64dec = s => decodeURIComponent(escape(atob(s.replace(/\n/g, ""))));
 
-/* Liest window.CARDS aus dem Quelltext von cards.js */
-export function parseCards(src) { const w = {}; new Function("window", src)(w); return w.CARDS || []; }
-/* Schreibt cards.js neu, Zeile pro Karte, wie bisher */
-export function serializeCards(head, list) { return head + "window.CARDS = [\n" + list.map(o => " " + JSON.stringify(o)).join(",\n") + "\n];\n"; }
-/* Hängt Karten an den bestehenden Quelltext an, ohne den Rest zu berühren (kleine Diffs in Git) */
-export function appendCards(src, list) {
-  const i = src.lastIndexOf("\n];");
-  if (i < 0) throw new Error("format");
-  return src.slice(0, i) + list.map(o => ",\n " + JSON.stringify(o)).join("") + src.slice(i);
-}
+export { parseCards, serializeCards, appendCards, headOf } from "../core/cardsfile.js";
+import { parseCards } from "../core/cardsfile.js";
 
 export function createGitHub({ repo, getToken }) {
   const base = "https://api.github.com/repos/" + repo + "/";
   const headers = () => ({ Authorization: "Bearer " + getToken(), Accept: "application/vnd.github+json" });
   let sha = null; // der letzte bekannte Stand von progress.json
 
-  function gh(method, body) {
-    return fetch(base + "contents/progress.json" + (method === "GET" ? "?ref=progress&t=" + Date.now() : ""), {
-      method, cache: "no-store", keepalive: method !== "GET", headers: headers(), body: body ? JSON.stringify(body) : undefined
-    });
+  /* Dateien lesen mit ETag: unverändert antwortet GitHub mit 304 ohne Inhalt, das zählt nicht zum Limit */
+  const cache = new Map();
+  async function fetchFile(path, ref) {
+    const k = path + "@" + ref, c = cache.get(k), h = headers();
+    if (c) h["If-None-Match"] = c.etag;
+    const r = await fetch(base + "contents/" + path + "?ref=" + ref + "&t=" + Date.now(), { headers: h, cache: "no-store" });
+    if (r.status === 304 && c) return { status: 200, json: c.json, same: true };
+    if (!r.ok) { if (r.status === 404) cache.delete(k); return { status: r.status, json: null, same: false }; }
+    const json = await r.json(), etag = r.headers.get("ETag");
+    if (etag) cache.set(k, { etag, json }); else cache.delete(k);
+    return { status: 200, json, same: false };
   }
+  const putFile = (path, body, extra) => fetch(base + "contents/" + path, Object.assign({ method: "PUT", headers: headers(), body: JSON.stringify(body) }, extra));
+
   async function pullProgress() {
-    const r = await gh("GET");
-    if (r.status === 404) { sha = null; return null; }
-    if (!r.ok) throw new Error(r.status);
-    const j = await r.json(); sha = j.sha;
-    return JSON.parse(b64dec(j.content));
+    const f = await fetchFile("progress.json", "progress");
+    if (f.status === 404) { sha = null; return null; }
+    if (f.status !== 200) throw new Error(f.status);
+    sha = f.json.sha;
+    return JSON.parse(b64dec(f.json.content));
   }
   async function makeBranch() {
     try {
@@ -41,22 +42,22 @@ export function createGitHub({ repo, getToken }) {
   /* getP liefert den aktuellen Stand; bei einem Konflikt bekommt onRemote den Stand aus GitHub zum Zusammenführen */
   async function pushProgress(getP, onRemote) {
     const body = () => { const b = { message: "Fortschritt", content: b64enc(JSON.stringify(getP())), branch: "progress" }; if (sha) b.sha = sha; return b; };
-    let r = await gh("PUT", body());
-    if ((r.status === 404 || r.status === 422) && !sha && await makeBranch()) r = await gh("PUT", body());
+    const put = () => putFile("progress.json", body(), { cache: "no-store", keepalive: true });
+    let r = await put();
+    if ((r.status === 404 || r.status === 422) && !sha && await makeBranch()) r = await put();
     if (r.status === 409 || r.status === 422) {
       const remote = await pullProgress(); if (remote) onRemote(remote);
-      r = await gh("PUT", body());
+      r = await put();
     }
     if (!r.ok) throw new Error(r.status);
     sha = (await r.json()).content.sha;
   }
 
   async function getFile(path, ref) {
-    const r = await fetch(base + "contents/" + path + "?ref=" + ref + "&t=" + Date.now(), { headers: headers(), cache: "no-store" });
-    if (!r.ok) throw new Error(String(r.status));
-    return r.json();
+    const f = await fetchFile(path, ref);
+    if (f.status !== 200) throw new Error(String(f.status));
+    return f.json;
   }
-  const putFile = (path, body) => fetch(base + "contents/" + path, { method: "PUT", headers: headers(), body: JSON.stringify(body) });
 
   /* cards.js in main ändern: edit(src, taken) liefert { out, result }; bei Konflikt (jemand war schneller) ein zweiter Versuch */
   async function editCards(edit, message) {
@@ -70,7 +71,12 @@ export function createGitHub({ repo, getToken }) {
     }
     throw new Error("409");
   }
-  async function readCards() { const j = await getFile("cards.js", "main"); return parseCards(b64dec(j.content)); }
+  /* null, wenn cards.js seit dem letzten Lesen unverändert ist */
+  async function readCards() {
+    const f = await fetchFile("cards.js", "main");
+    if (f.status !== 200) throw new Error(String(f.status));
+    return f.same ? null : parseCards(b64dec(f.json.content));
+  }
 
   /* Datei im Branch progress schreiben (push.json) */
   async function putProgressFile(path, obj) {

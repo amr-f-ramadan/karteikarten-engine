@@ -1,5 +1,5 @@
 // Fortschritt mit GitHub abgleichen: beim Start und Sichtbarwerden holen und zusammenführen, Änderungen gebündelt schicken.
-import { merge } from "../core/progress.js";
+import { merge, prune } from "../core/progress.js";
 import { $ } from "../ui/dom.js";
 
 export function createSync(ctx) {
@@ -21,7 +21,7 @@ export function createSync(ctx) {
           const before = key(S.P);
           const m = merge(S.P, remote);
           if (key(m) + JSON.stringify(m.pending) !== key(remote) + JSON.stringify(remote.pending || {})) S.dirty = true;
-          S.P = m; ctx.writeLocal();
+          S.P = prune(m); ctx.writeLocal();
           if (before !== key(S.P) && !S.learn.cur) ctx.session.ensureCur();
         } else S.dirty = true;
       }

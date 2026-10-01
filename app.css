@@ -192,3 +192,11 @@ nav button:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
 /* Gesperrt, solange etwas lädt: Knöpfe gedimmt, der ladende Lautsprecher bleibt sichtbar */
 body.hold #main .btn,body.hold #main .say:not(.loading),body.hold #main .famchip,body.hold #main .chip{opacity:.45;transition:opacity .2s}
 body.hold #main{cursor:progress}
+
+/* Listenzeilen ohne Weichzeichner: bei vielen Zeilen wird das sonst teuer, die Farbe bleibt */
+.list li{-webkit-backdrop-filter:none;backdrop-filter:none;background:color-mix(in srgb,var(--glass-strong) 70%,var(--bg))}
+/* Lange Listen: Themen zum Einklappen */
+.topic.coll h3{cursor:pointer;user-select:none;-webkit-user-select:none}
+.topic.coll h3>span:first-child::before{content:"▾";display:inline-block;width:1em;color:var(--muted);transition:transform .15s}
+.topic.coll.closed h3>span:first-child::before{transform:rotate(-90deg)}
+.topic.coll.closed .list{display:none}

@@ -12,7 +12,8 @@ export const famRow = (relatives, T) => (relatives.length ? `<div class="famrow"
 /* Lernstufe als Punkte (b = -1 für ungelernt) */
 export const dots = (b, T) => `<span class="lvl" aria-label="${T("level")} ${Math.max(b, 0)}">${Array.from({ length: INT.length - 1 }, (_, i) => `<i class="${i < b ? "on" : ""}"></i>`).join("")}</span>`;
 export const field = (id, label, val, big) => `<label class="fld">${label}${big ? `<textarea id="${id}" rows="2" dir="auto">${esc(val || "")}</textarea>` : `<input id="${id}" dir="auto" value="${esc(val || "")}">`}</label>`;
-export const topicSection = (title, rows) => `<section class="topic"><h3><span>${esc(title)}</span><span class="tcount">${rows.length}</span></h3><ul class="list">${rows.join("")}</ul></section>`;
+/* closed: Thema eingeklappt (lange Listen); null = Liste nicht einklappbar */
+export const topicSection = (title, rows, closed = null) => `<section class="topic${closed === null ? "" : closed ? " coll closed" : " coll"}" data-topic="${esc(title)}"><h3${closed === null ? "" : ' data-act="topic"'}><span>${esc(title)}</span><span class="tcount">${rows.length}</span></h3><ul class="list">${rows.join("")}</ul></section>`;
 export const searchBox = (query, T) => `<input id="q" class="search" type="search" dir="auto" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${esc(T("searchPh"))}" value="${esc(query)}">`;
 export const waitChips = (entries, T) => (entries.length ? `<div class="wait"><p class="waith">${T("waitH")}</p>${entries.map(([k, s]) => `<span class="chip de">${esc(s.w)}<button data-act="unq" data-k="${esc(k)}" aria-label="${T("waitRm")}">×</button></span>`).join("")}</div>` : "");
 export const exRow = (ex, label) => `<div class="exrow"><p class="ex de">${ex}</p>${sayT(ex, label)}</div>`;

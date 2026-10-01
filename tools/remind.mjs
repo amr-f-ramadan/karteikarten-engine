@@ -2,10 +2,16 @@
 // Titel und Texte kommen aus window.APP in index.html (t.appName, remind). Schickt einmal am Tag eine Erinnerung, sobald die eingestellte
 // Uhrzeit erreicht ist und Karten fällig sind. Liest push.json und progress.json aus dem Branch "progress"
 // und cards.js aus main. Merkt sich in sent.json (Branch "progress"), dass heute schon gesendet wurde.
+// Fällige und neue Karten zählt es mit denselben Funktionen wie die App (src/core).
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import webpush from "web-push";
+import { CardStore } from "../src/core/store.js";
+import { parseCards } from "../src/core/cardsfile.js";
+import { dueCards, freshCards } from "../src/core/leitner.js";
+import { optOf } from "../src/core/progress.js";
+import { isP } from "../src/core/text.js";
 
 const force = process.env.FORCE === "true";
 const git = f => { try { return execSync(`git show origin/progress:${f}`, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }); } catch { return null; } };
@@ -35,22 +41,16 @@ if (!force) {
   } else if (ahead < 0) console.log(`Erinnerung um ${at}, wird nachgeholt.`);
 }
 
-const ctx = { window: {} };
-vm.runInNewContext(readFileSync("cards.js", "utf8"), ctx);
-const cards = ctx.window.CARDS || [];
+const store = new CardStore(parseCards(readFileSync("cards.js", "utf8")));
 const appCtx = { window: {}, localStorage: { getItem: () => null } };
 for (const m of readFileSync("index.html", "utf8").matchAll(/<script>([\s\S]*?)<\/script>/g)) vm.runInNewContext(m[1], appCtx);
 const APP = appCtx.window.APP || {};
 
 const P = JSON.parse(git("progress.json") || "null") || { cards: {}, newDay: {}, opts: {} };
-const now = Date.now();
-const opt = (k, d) => (P.opts && P.opts[k] !== undefined ? P.opts[k] : d);
-const isP = c => c.k === "p";
-const due = cards.filter(c => P.cards[c.id] && P.cards[c.id].due <= now).length;
-const newDay = P.newDay && P.newDay.d === today ? P.newDay : { n: 0, p: 0 };
-const fresh = Math.min(cards.filter(c => !P.cards[c.id] && !isP(c)).length, Math.max(0, opt("newPerDay", APP.newPerDay || 10) - (newDay.n || 0)));
-// Wendungen (k: "p") haben ein eigenes Tageslimit, nur wenn die App sie eingeschaltet hat (APP.phrases)
-const freshP = APP.phrases ? Math.min(cards.filter(c => !P.cards[c.id] && isP(c)).length, Math.max(0, opt("newPhrases", APP.phrases.perDay || 3) - (newDay.p || 0))) : 0;
+const due = dueCards(store.all, P).length;
+const limits = { words: optOf(P, "newPerDay", APP.newPerDay || 10), phrases: APP.phrases ? optOf(P, "newPhrases", APP.phrases.perDay || 3) : 0 };
+const freshAll = freshCards(store.words, APP.phrases ? store.phrases : null, P, today, limits);
+const freshP = freshAll.filter(isP).length, fresh = freshAll.length - freshP;
 const total = due + fresh + freshP;
 if (!total && !force) { console.log("Heute ist nichts mehr fällig."); process.exit(0); }
 
@@ -69,7 +69,6 @@ try {
   console.error("Fehler beim Senden:", e.statusCode, e.body);
   process.exit(e.statusCode === 404 || e.statusCode === 410 ? 0 : 1);
 }
-
 // Merken, dass heute gesendet wurde (nicht beim Test)
 if (!force && process.env.GITHUB_TOKEN && process.env.GITHUB_REPOSITORY) {
   const url = `https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/contents/sent.json`;

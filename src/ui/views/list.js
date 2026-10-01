@@ -8,15 +8,22 @@ import { createPhrasesPart } from "./phrases.js";
 
 export function createListView(ctx) {
   const { S, T, C, store, vocab, session, flash } = ctx, PH = C.phrases || null;
-  const phrases = PH ? createPhrasesPart(ctx) : null;
 
+  /* Ab COLLAPSE_AT Zeilen sind die Themen einklappbar und zunächst bis auf das erste zu; die Suche zeigt Treffer immer */
+  const COLLAPSE_AT = 150;
+  function closedSet(kind, titles) {
+    const c = S.list.closed;
+    if (c[kind] === null && titles.length > 1) c[kind] = new Set(titles.slice(1));
+    return c[kind];
+  }
   function applyFilter() {
-    const q = norm(S.list.query).trim();
+    const q = norm(S.list.query).trim(), closed = S.list.closed[S.list.kind];
     let any = false;
     document.querySelectorAll(".topic").forEach(sec => {
       let n = 0;
       sec.querySelectorAll("li").forEach(li => { const hit = !q || li.dataset.s.includes(q); li.hidden = !hit; if (hit) n++; });
       sec.hidden = !n; if (n) any = true;
+      if (closed) sec.classList.toggle("closed", !q && closed.has(sec.dataset.topic));
       const cnt = sec.querySelector(".tcount"); if (cnt) cnt.textContent = n;
     });
     const nh = $("#nohits"); if (nh) nh.hidden = any;
@@ -89,11 +96,12 @@ export function createListView(ctx) {
         ${wordHTML(c)}${dots(boxOf(S.P, c), T)}</button>
         ${open ? `<div class="detail">${arLine(c.ar)}${c.perf ? `<p class="perf de">${T("perfL")} <b>${esc(c.perf)}</b></p>` : ""}${exRow(c.ex, T("sayEx"))}${trLine(c.tr)}${famRow(store.relatives(c), T)}<div class="row2"><button class="btn" data-act="sayt" data-t="${esc(fullWord(c))}">${T("phSay")}</button><button class="btn again" data-act="del" data-id="${c.id}">${T("delCard")}</button></div></div>` : ""}</li>`);
     });
-    const secs = [...topics.entries()].map(([t, rows]) => topicSection(t, rows)).join("");
-    const words = store.words;
+    const words = store.words, closed = words.length > COLLAPSE_AT ? closedSet("w", [...topics.keys()]) : null;
+    const secs = [...topics.entries()].map(([t, rows]) => topicSection(t, rows, closed ? closed.has(t) : null)).join("");
     return `${renderAdd()}${searchBox(S.list.query, T)}
       <p class="meta">${T("listStat").replace("{a}", learnedCount(words, S.P)).replace("{t}", words.length)}</p>${secs}<p id="nohits" class="meta dim" hidden>${T("noHits")}</p>`;
   }
+  const phrases = PH ? createPhrasesPart(ctx, { closedSet, COLLAPSE_AT }) : null;
   const render = () => renderSeg() + (PH && S.list.kind === "p" ? phrases.render() : renderWords());
 
   return {
@@ -106,7 +114,8 @@ export function createListView(ctx) {
       del: el => vocab.deleteCard(el.dataset.id),
       unq: el => { vocab.unqueue(el.dataset.k); ctx.render(); },
       discard: () => { S.add = emptyAdd(); ctx.render(); },
-      lk: el => { S.list.kind = el.dataset.k; S.list.open = null; S.list.query = ""; ctx.render(); }
+      lk: el => { S.list.kind = el.dataset.k; S.list.open = null; S.list.query = ""; ctx.render(); },
+      topic: el => { const sec = el.closest(".topic"), c = S.list.closed[S.list.kind]; if (!sec || !c) return; const t = sec.dataset.topic; if (c.has(t)) c.delete(t); else c.add(t); sec.classList.toggle("closed", c.has(t)); }
     }, phrases ? phrases.actions : {}),
     input: { q: el => { S.list.query = el.value; applyFilter(); } },
     keys(e) {

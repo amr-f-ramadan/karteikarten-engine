@@ -7,7 +7,7 @@ export function createState(P) {
     mode: "learn",
     learn: { queue: [], cur: null, flipped: false, turning: false },
     quiz: null,
-    list: { open: null, kind: "w", query: "" },
+    list: { open: null, kind: "w", query: "", closed: { w: null, p: null } },
     add: { word: "", busy: false, card: null, msg: "" },
     pad: { word: "", busy: false, card: null, msg: "" },
     pr: { words: [], task: "", starter: "", answer: "", fb: null, busy: false, msg: "" }

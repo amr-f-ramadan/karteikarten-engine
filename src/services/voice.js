@@ -26,8 +26,22 @@ export function createVoice({ gemini, getKey, opt, local, voice }) {
   const gemVoice = () => !!getKey() && opt("gvoice", true) && !!player && "indexedDB" in window;
   let vdb = null;
   const db = () => vdb || (vdb = new Promise((res, rej) => { const r = indexedDB.open("kk-voice", 1); r.onupgradeneeded = () => r.result.createObjectStore("a"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }));
-  const dbGet = k => db().then(d => new Promise(res => { const q = d.transaction("a").objectStore("a").get(k); q.onsuccess = () => res(q.result || null); q.onerror = () => res(null); })).catch(() => null);
-  const dbPut = (k, v) => db().then(d => new Promise(res => { const t = d.transaction("a", "readwrite"); t.objectStore("a").put(v, k); t.oncomplete = t.onerror = () => res(); })).catch(() => {});
+  // Einträge: { blob, t }; ältere Stände haben den Blob direkt gespeichert
+  const dbGet = k => db().then(d => new Promise(res => { const q = d.transaction("a").objectStore("a").get(k); q.onsuccess = () => { const v = q.result; res(v ? v.blob || v : null); }; q.onerror = () => res(null); })).catch(() => null);
+  const dbPut = (k, blob) => db().then(d => new Promise(res => { const t = d.transaction("a", "readwrite"); t.objectStore("a").put({ blob, t: Date.now() }, k); t.oncomplete = t.onerror = () => res(); })).then(trim).catch(() => {});
+  /* Speicher begrenzen: über CAP fliegen die ältesten Aufnahmen raus (einmal pro Sitzung geprüft) */
+  const CAP = 150 * 1024 * 1024;
+  let trimmed = false;
+  async function trim() {
+    if (trimmed) return; trimmed = true;
+    const d = await db();
+    const rows = await new Promise(res => { const out = [], q = d.transaction("a").objectStore("a").openCursor(); q.onsuccess = () => { const c = q.result; if (!c) return res(out); const v = c.value; out.push({ k: c.key, t: v.t || 0, size: (v.blob || v).size || 0 }); c.continue(); }; q.onerror = () => res(out); });
+    let total = rows.reduce((a, r) => a + r.size, 0);
+    if (total <= CAP) return;
+    rows.sort((a, b) => a.t - b.t);
+    const st = d.transaction("a", "readwrite").objectStore("a");
+    for (const r of rows) { if (total <= CAP * 0.8) break; st.delete(r.k); total -= r.size; }
+  }
 
   async function ttsModel() {
     const m = local.get(MK);

@@ -1,6 +1,6 @@
 // Kartenbestand mit Indizes. Alle Änderungen an der Liste laufen hier durch (push, remove, syncWith),
 // die Indizes werden danach beim nächsten Zugriff neu gebaut. Ohne DOM, auch für die Node-Werkzeuge.
-import { isP, isNoun, famKey, norm, fullWord, pk, wordKey } from "./text.js";
+import { isP, isNoun, famKey, norm, fullWord, pk, wordKey, sameStem } from "./text.js";
 
 export class CardStore {
   constructor(cards) { this.all = cards; this._i = null; this._hay = new WeakMap(); }
@@ -26,6 +26,8 @@ export class CardStore {
   relatives(c) { return this.family(c).filter(x => x !== c); }
   hasFam(k) { return this.idx.byFam.has(k); }
   famList() { return [...this.idx.byFam.keys()].join(", "); }
+  /* Nur Familien, deren Stamm zum neuen Wort passt (so wie saveCard sie auch annimmt); der Auftrag wächst nicht mit dem Wortschatz */
+  famListFor(word) { const keys = [...this.idx.byFam.keys()].filter(k => sameStem(word, k) || sameStem(k, word)); return keys.length ? keys.join(", ") : "keine"; }
   topicList() { return [...new Set(this.words.map(c => c.cat).filter(Boolean))].join(", "); }
   phraseGroups() { return [...new Set(this.phrases.map(c => c.cat).filter(Boolean))].join(", "); }
   /* Schon vorhanden? Wörter ohne Artikel verglichen, Wendungen ohne Satzzeichen */

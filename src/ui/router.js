@@ -11,7 +11,7 @@ export function createRouter(ctx) {
 
   function render() {
     document.querySelectorAll("nav button").forEach(b => b.setAttribute("aria-current", b.dataset.mode === S.mode ? "page" : "false"));
-    const dueN = ctx.session.dueCount();
+    const st = ctx.session.count(), dueN = st.due + st.fresh;
     const bd = $("#badge"); if (bd) { bd.textContent = dueN; bd.hidden = !dueN; }
     ctx.badge(dueN);
     const v = current();

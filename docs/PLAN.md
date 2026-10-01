@@ -87,3 +87,17 @@ Each step ends with `npm test` green (build check, unit tests, 74 e2e checks).
 
 Deferred (not in this branch, noted for later): `cards.js` → JSON (would change both app repos and Git history of the
 word lists); loading `cards.js` with `defer` (needs an app change, tiny win); compressing voice audio.
+
+## Status
+
+Done on this branch: steps 1 to 10. Measured on the bundle: 70 KB → 52 KB minified (one request as before);
+list rendering O(N) through the store indexes; list rows without `backdrop-filter`; topics collapse above 150 rows;
+`cards.js` and `progress.json` are re-downloaded only when GitHub reports a change (ETag); done waitlist entries
+pruned after 30 days; voice cache capped at 150 MB; the new-card prompt lists only families with a matching stem
+(the de-karteikarten fingerprint was updated for exactly that line); the tools count and prompt with `src/core`.
+
+Not changed, on purpose: `writeLocal` stays synchronous (iOS can end a home-screen app at any moment; a debounce
+could lose the last answer); `cards.js` stays a JS file (format change would touch both app repos and their history).
+
+Noticed, not changed (separate decision): the app's "today" for daily limits is the UTC date (`toISOString`), the
+reminder tool uses the phone's time zone; between midnight and 02:00 local time the two can disagree by a day.

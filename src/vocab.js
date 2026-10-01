@@ -1,14 +1,14 @@
 // Wortschatz pflegen: neue Karten und Wendungen mit Gemini, Speichern in cards.js, Löschen, Warteliste.
 import { fullWord, sameStem, famKey, topicOf, slug, pkey } from "./core/text.js";
 import { cardPrompt, cardSchema, phrasePrompt, phraseSchema, starterPrompt, starterSchema, goodPhrase } from "./core/prompt.js";
-import { appendCards, serializeCards, parseCards } from "./services/github.js";
+import { appendCards, serializeCards, parseCards, headOf } from "./core/cardsfile.js";
 import { hold } from "./ui/dom.js";
 
 export function createVocab(ctx) {
   const { C, T, S, store, github, gemini } = ctx, PH = C.phrases || null;
   /* Felder und Regeln für neue Karten kommen aus index.html (C.fields, C.rules mit intro und end) */
   const FIELDS = C.fields, has = f => FIELDS.includes(f), SCHEMA = cardSchema(FIELDS);
-  const genCard = word => gemini.generate(cardPrompt(C.rules, FIELDS, word, { fams: store.famList(), topics: store.topicList() }), SCHEMA, c => c.w);
+  const genCard = word => gemini.generate(cardPrompt(C.rules, FIELDS, word, { fams: store.famListFor(word), topics: store.topicList() }), SCHEMA, c => c.w);
   const PSCHEMA = PH ? phraseSchema(PH.fields) : null;
   const genPhrase = w => gemini.generate(phrasePrompt(PH, w, store.phraseGroups()), PSCHEMA, goodPhrase);
   const genStarter = () => gemini.generate(starterPrompt(PH, store.phraseGroups()), starterSchema(PH.fields), a => Array.isArray(a) && a.some(goodPhrase));
@@ -41,7 +41,7 @@ export function createVocab(ctx) {
   }, l => (l.length === 1 ? "Neue Wendung: " + l[0].w : l.length + " neue Wendungen"));
   const removeCard = id => github.editCards(src => {
     const list = parseCards(src).filter(c => c.id !== id);
-    return { out: serializeCards(src.slice(0, src.indexOf("window.CARDS")), list), result: null };
+    return { out: serializeCards(headOf(src), list), result: null };
   }, () => "Wort gelöscht: " + id);
 
   async function deleteCard(id) {
@@ -69,7 +69,7 @@ export function createVocab(ctx) {
     if (!S.sync.token) return;
     try {
       const list = await github.readCards();
-      if (!Array.isArray(list) || !list.length) return;
+      if (!list || !list.length) return;
       const fresh = store.syncWith(list);
       if (fresh.length) { ctx.session.ensureCur(); ctx.render(); }
     } catch (e) {}

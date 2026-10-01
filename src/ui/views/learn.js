@@ -8,7 +8,7 @@ import { speakBtn, wordHTML, famRow, arLine, trLine, noteBox } from "../parts.js
 export function createLearnView(ctx) {
   const { S, T, C, store, session } = ctx, L = S.learn;
   function render() {
-    const due = session.due().length, fresh = session.fresh().length;
+    const { due, fresh } = session.stats;
     if (!L.cur) {
       return `<div class="done"><p class="big">${T("doneTitle")}</p><p>${T("doneText").replace("{n}", dueByTomorrow(store.all, S.P))}</p>
         <button class="btn" data-act="more">${T("moreNew")}</button></div>`;
