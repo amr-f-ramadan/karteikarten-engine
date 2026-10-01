@@ -565,14 +565,16 @@ const toastOf = async (page, action) => {
     check("Voice: the same text again (also after reopening) comes from the device, no new Gemini call", gem.tts.length === 1 && gem.lists === 1 && again === 1, { tts: gem.tts.length, lists: gem.lists, again });
     // Article quiz: the word is spoken after answering; while its voice is made, the quiz waits
     await tab(page, "quiz");
+    const freeOf = () => page.waitForFunction(() => !document.body.classList.contains("hold"), null, { timeout: 15000 });
+    await freeOf(); // a hold from an earlier step would swallow the tap below
     const qWord = await page.textContent(".card.quiz .word");
     gem.ttsDelay = 1500;
-    await page.click('.arts [data-g="der"]'); await sleep(400);
+    await page.click('.arts [data-g="der"]'); await page.waitForSelector(".arts .right", { timeout: 5000 }); await sleep(300);
     const qHold = await page.evaluate(() => ({ hold: document.body.classList.contains("hold"), ring: !!document.querySelector(".card.quiz .say.loading"), dim: getComputedStyle(document.querySelector('[data-act="nextq"]')).opacity }));
     await page.screenshot({ path: SHOTS + "/voice-quiz-hold.png", clip: { x: 0, y: 60, width: 390, height: 560 } });
     await page.click('[data-act="nextq"]'); await sleep(100);
     const qSame = (await page.textContent(".card.quiz .word")).includes(qWord.replace("___", "").trim());
-    await sleep(1500); gem.ttsDelay = 0;
+    await freeOf(); gem.ttsDelay = 0;
     const qFree = await page.evaluate(() => !document.body.classList.contains("hold") && !document.querySelector(".loading"));
     await page.click('[data-act="nextq"]'); await sleep(200);
     const qNext = !!(await page.$(".arts .btn:not(.right):not(.wrong):not(.fade)"));
