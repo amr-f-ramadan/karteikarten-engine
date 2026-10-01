@@ -117,7 +117,7 @@
     if (g === quiz.c.g) a.ok++; else a.w++;
     a.t = Date.now(); P.art[id] = a; changed();
     render();
-    speak(ART[quiz.c.g] + " " + quiz.c.w);
+    speak(ART[quiz.c.g] + " " + quiz.c.w, $(".card.quiz .say"));
   }
 
   /* ---------- Aussprache ---------- */
@@ -174,7 +174,7 @@
   async function genAudio(text) {
     const m = await ttsModel();
     const ask = voice => fetch("https://generativelanguage.googleapis.com/v1beta/models/" + m + ":generateContent", {
-      method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": gkey },
+      method: "POST", signal: AbortSignal.timeout ? AbortSignal.timeout(HOLD_MS) : undefined, headers: { "Content-Type": "application/json", "x-goog-api-key": gkey },
       body: JSON.stringify({ contents: [{ parts: [{ text }] }], generationConfig: Object.assign({ responseModalities: ["AUDIO"] }, voice ? { speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } } : {}) })
     });
     let r = await ask(VOICE);
@@ -202,17 +202,17 @@
     (async () => {
       let blob = await dbGet(key);
       if (!blob) {
-        if (my === turn) { loadSel = btnSel(btn); markLoading(); }
+        if (my === turn) { loadSel = btnSel(btn); markLoading(); hold(true); }
         if (!making.has(key)) making.set(key, genAudio(text).then(b => { dbPut(key, b); return b; }).finally(() => making.delete(key)));
         blob = await making.get(key);
       }
       if (my !== turn) return;
-      stopLoading();
+      stopLoading(); if (holding) hold(false);
       if (lastUrl) URL.revokeObjectURL(lastUrl);
       player.src = lastUrl = URL.createObjectURL(blob);
       player.playbackRate = opt("slow", false) ? 0.75 : 1;
       await player.play();
-    })().catch(() => { if (my === turn) { stopLoading(); speakLocal(text); } });
+    })().catch(() => { if (my === turn) { stopLoading(); if (holding) hold(false); speakLocal(text); } });
   }
   function speak(text, btn) {
     const t = plain(text);
@@ -424,6 +424,7 @@
     const c = CARDS.find(x => x.id === id); if (!c) return;
     if (!token) { flash(T("needTok")); return; }
     if (!confirm(T("delQ").replace("{w}", fullWord(c)))) return;
+    hold(true);
     try {
       await removeCard(id);
       CARDS.splice(CARDS.indexOf(c), 1);
@@ -434,6 +435,7 @@
       if (cur && cur.id === id) { cur = queue.shift() || null; flipped = false; }
       listOpen = null; flash(T("deleted")); render();
     } catch (e) { flash(T("delFail") + " (" + e.message + ")"); }
+    hold(false);
   }
   function readForm() {
     const v = id => { const el = $("#" + id); return el ? el.value.trim() : ""; };
@@ -444,7 +446,7 @@
     if (!add.word || add.busy) return;
     if (!gkey) { add.msg = T("needKey"); render(); return; }
     if (exists(add.word)) { add.msg = T("dup"); render(); return; }
-    add.busy = "gen"; add.msg = ""; render();
+    add.busy = "gen"; add.msg = ""; hold(true, SLOW_MS); render();
     try {
       add.card = await genCard(add.word);
       // Eingabe auf Arabisch oder Englisch: erst jetzt steht das deutsche Wort fest
@@ -455,21 +457,21 @@
       if (m === "key") add.msg = T("keyBad");
       else { queueWord(add.word); add.msg = T("queued"); add.word = ""; }
     }
-    add.busy = false; render();
+    add.busy = false; hold(false); render();
   }
   async function doSave() {
     if (add.busy) return;
     const card = readForm(); add.card = card;
     if (!card.w || !card.ar || !card.ex) return;
     if (!token) { add.msg = T("needTok"); render(); return; }
-    add.busy = "save"; render();
+    add.busy = "save"; hold(true, SLOW_MS); render();
     try {
       const o = await saveCard(card);
       CARDS.push(o); nouns = nounList();
       add = { word: "", busy: false, card: null, msg: "" }; flash(T("saved"));
       if (!cur) { buildQueue(); cur = queue.shift() || null; }
     } catch (e) { add.busy = false; add.msg = T("genFail") + " (" + e.message + ")"; }
-    add.busy = false; render();
+    add.busy = false; hold(false); render();
   }
   /* ---------- Wendungen hinzufügen ---------- */
   let pad = { word: "", busy: false, card: null, msg: "" };
@@ -479,7 +481,7 @@
     if (!pad.word || pad.busy) return;
     if (!gkey) { pad.msg = T("needKey"); render(); return; }
     if (existsP(pad.word)) { pad.msg = T("phDup"); render(); return; }
-    pad.busy = "gen"; pad.msg = ""; render();
+    pad.busy = "gen"; pad.msg = ""; hold(true, SLOW_MS); render();
     try {
       pad.card = await genPhrase(pad.word);
       if (existsP(pad.card.w)) { pad.msg = T("phDup"); pad.card = null; pad.word = ""; }
@@ -487,7 +489,7 @@
       if (gemErr(e)) pad.msg = gemErr(e);
       else { queueWord(pad.word, "p"); pad.msg = T("phQueued"); pad.word = ""; }
     }
-    pad.busy = false; render();
+    pad.busy = false; hold(false); render();
   }
   async function doPSave() {
     if (pad.busy) return;
@@ -496,18 +498,18 @@
     pad.card = card;
     if (!card.w || !card.ar || !card.ex) return;
     if (!token) { pad.msg = T("needTok"); render(); return; }
-    pad.busy = "save"; render();
+    pad.busy = "save"; hold(true, SLOW_MS); render();
     try {
       const [o] = await savePhrases([card]);
       CARDS.push(o); pad = { word: "", busy: false, card: null, msg: "" }; flash(T("saved")); refill();
     } catch (e) { pad.msg = T("genFail") + " (" + e.message + ")"; }
-    pad.busy = false; render();
+    pad.busy = false; hold(false); render();
   }
   async function doStarter() {
     if (pad.busy) return;
     if (!gkey) { pad.msg = T("needKey"); render(); return; }
     if (!token) { pad.msg = T("needTok"); render(); return; }
-    pad.busy = "starter"; pad.msg = ""; render();
+    pad.busy = "starter"; pad.msg = ""; hold(true, 2 * SLOW_MS); render();
     try {
       const seen = new Set(CARDS.filter(isP).map(c => pk(c.w)));
       const list = (await genStarter()).filter(p => goodP(p) && !seen.has(pk(p.w)) && seen.add(pk(p.w)));
@@ -515,7 +517,7 @@
       saved.forEach(o => CARDS.push(o));
       flash(T("phStarterDone").replace("{n}", saved.length)); refill();
     } catch (e) { pad.msg = gemErr(e) || T("phStarterFail"); }
-    pad.busy = false; render();
+    pad.busy = false; hold(false); render();
   }
 
   /* ---------- Warteliste ---------- */
@@ -682,18 +684,18 @@
   async function prNew() {
     if (pr.busy) return;
     if (!gkey) { pr.msg = T("needKey"); render(); return; }
-    pr = { words: pickWords(), task: "", starter: "", answer: "", fb: null, busy: "task", msg: "" }; render();
+    pr = { words: pickWords(), task: "", starter: "", answer: "", fb: null, busy: "task", msg: "" }; hold(true, SLOW_MS); render();
     try { const t = await gemini(fill(C.practice.task, { words: wordList(pr.words), topic: pr.words[0].cat || "" }), PR_TASK, o => o.task); pr.task = t.task; pr.starter = t.starter || ""; }
     catch (e) { pr.msg = prError(e); }
-    pr.busy = false; prSave(); render();
+    pr.busy = false; prSave(); hold(false); render();
   }
   async function prCheck() {
     const el = $("#pa"); if (el) pr.answer = el.value.trim();
     if (!pr.answer || pr.busy) return;
-    pr.busy = "check"; pr.msg = ""; render();
+    pr.busy = "check"; pr.msg = ""; hold(true, SLOW_MS); render();
     try { pr.fb = await gemini(fill(C.practice.feedback, { words: wordList(pr.words), task: pr.task, answer: pr.answer }), PR_FB, o => o.natural); }
     catch (e) { pr.msg = prError(e); }
-    pr.busy = false; prSave(); render();
+    pr.busy = false; prSave(); hold(false); render();
   }
   /* Korrekturen sichtbar machen: Antwort und korrigierte Fassung Wort für Wort vergleichen (auf dem Gerät, ohne Gemini).
      Falsches durchgestrichen, Richtiges direkt dahinter hervorgehoben. */
@@ -783,6 +785,14 @@
 
   /* ---------- Oberfläche ---------- */
   let mode = "learn", listOpen = null;
+  /* Während etwas Langsames läuft (z. B. eine neue Aussprache), sind die Knöpfe gesperrt: bis zum Ergebnis, höchstens HOLD_MS */
+  const HOLD_MS = 12000;
+  let holding = false, holdT = null;
+  const SLOW_MS = 30000; // Gemini-Text (Karten, Übungen) braucht länger als eine Aussprache
+  function hold(on, ms) {
+    holding = on; document.body.classList.toggle("hold", on); clearTimeout(holdT);
+    if (on) holdT = setTimeout(() => hold(false), ms || HOLD_MS);
+  }
   function flash(msg) { const el = $("#toast"); el.textContent = msg; el.hidden = false; clearTimeout(el._t); el._t = setTimeout(() => (el.hidden = true), 2600); }
   const gClass = c => "g-" + (c.g || "x");
   const speakBtn = (what, label) => `<button class="say" data-say="${what}" aria-label="${esc(label)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg></button>`;
@@ -844,6 +854,7 @@
       <div class="card quiz ${quiz.picked ? gClass(c) : ""}">
         <div class="face"><span class="de word">${quiz.picked ? `<span class="art">${ART[c.g]}</span> ` : "<span class=\"blank\">___</span> "}${esc(c.w)}</span>
         ${quiz.picked ? `<p class="ar" lang="ar" dir="rtl">${esc(c.ar)}</p>` : ""}</div>
+        ${quiz.picked ? sayT(fullWord(c), T("sayWord")) : ""}
       </div>
       <div class="arts">${opts}</div>
       ${quiz.picked ? `<button class="btn wide" data-act="nextq">${T("next")}</button>` : ""}
@@ -974,6 +985,7 @@
   document.addEventListener("click", e => {
     const nb = e.target.closest("nav button");
     if (nb) { mode = nb.dataset.mode; if (mode === "quiz" && !quiz) pickQuiz(); render(); window.scrollTo(0, 0); return; }
+    if (holding && e.target.closest("#main")) { e.preventDefault(); e.stopPropagation(); return; }
     const say = e.target.closest(".say");
     if (say && say.dataset.t) { e.stopPropagation(); speak(say.dataset.t, say); return; }
     if (say) { e.stopPropagation(); const c = mode === "quiz" ? quiz && quiz.c : cur; if (c) speak(say.dataset.say === "ex" ? c.ex : fullWord(c), say); return; }
@@ -1026,6 +1038,7 @@
   });
   document.addEventListener("input", e => { if (e.target.id === "q") { query = e.target.value; applyFilter(); } else if (e.target.id === "pa") { pr.answer = e.target.value; prSave(); } });
   document.addEventListener("keydown", e => {
+    if (holding && !/INPUT|TEXTAREA/.test(e.target.tagName)) { e.preventDefault(); return; }
     if (e.target.id === "nw" && e.key === "Enter") { e.preventDefault(); doGen(); return; }
     if (e.target.id === "np" && e.key === "Enter") { e.preventDefault(); doPGen(); return; }
     if (mode !== "learn" || !cur || /INPUT|TEXTAREA/.test(e.target.tagName)) return;

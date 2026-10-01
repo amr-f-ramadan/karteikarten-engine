@@ -189,3 +189,6 @@ nav button:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
 .prkey .sty::before{background:var(--sty,#2F6FD0)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--sty:#8AB4FF}}
 :root[data-theme="dark"]{--sty:#8AB4FF}
+/* Gesperrt, solange etwas lädt: Knöpfe gedimmt, der ladende Lautsprecher bleibt sichtbar */
+body.hold #main .btn,body.hold #main .say:not(.loading),body.hold #main .famchip,body.hold #main .chip{opacity:.45;transition:opacity .2s}
+body.hold #main{cursor:progress}
