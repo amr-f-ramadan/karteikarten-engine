@@ -188,29 +188,36 @@
     return /pcm|l16/i.test(mime) ? wav(bytes, Number((mime.match(/rate=(\d+)/) || [0, 24000])[1])) : new Blob([bytes], { type: mime || "audio/wav" });
   }
   const making = new Map();
-  let turn = 0, lastUrl = "";
-  function speakGem(text) {
+  let turn = 0, lastUrl = "", loadSel = null;
+  // Ring um den Lautsprecher, solange eine neue Aussprache erzeugt wird (bleibt auch nach einem Neuzeichnen)
+  const markLoading = () => { if (loadSel) document.querySelectorAll(loadSel).forEach(b => { b.classList.add("loading"); b.setAttribute("aria-busy", "true"); }); };
+  function stopLoading() { loadSel = null; document.querySelectorAll(".loading").forEach(b => { b.classList.remove("loading"); b.removeAttribute("aria-busy"); }); }
+  const btnSel = b => !b ? null : b.dataset.t !== undefined ? `[data-t="${CSS.escape(b.dataset.t)}"]` : b.dataset.say ? `#card .say[data-say="${b.dataset.say}"]` : null;
+  function speakGem(text, btn) {
     const my = ++turn, key = VOICE + "|" + text;
+    stopLoading();
     try { if (hasTTS) speechSynthesis.cancel(); } catch (e) {}
     // iOS erlaubt Ton nur direkt beim Tippen: den Player jetzt mit Stille starten, den echten Ton gleich danach
     player.pause(); player.src = SILENT; player.play().catch(() => {});
     (async () => {
       let blob = await dbGet(key);
       if (!blob) {
+        if (my === turn) { loadSel = btnSel(btn); markLoading(); }
         if (!making.has(key)) making.set(key, genAudio(text).then(b => { dbPut(key, b); return b; }).finally(() => making.delete(key)));
         blob = await making.get(key);
       }
       if (my !== turn) return;
+      stopLoading();
       if (lastUrl) URL.revokeObjectURL(lastUrl);
       player.src = lastUrl = URL.createObjectURL(blob);
       player.playbackRate = opt("slow", false) ? 0.75 : 1;
       await player.play();
-    })().catch(() => { if (my === turn) speakLocal(text); });
+    })().catch(() => { if (my === turn) { stopLoading(); speakLocal(text); } });
   }
-  function speak(text) {
+  function speak(text, btn) {
     const t = plain(text);
     if (!t) return;
-    if (gemVoice()) speakGem(t); else speakLocal(t);
+    if (gemVoice()) speakGem(t, btn); else speakLocal(t);
   }
   const fullWord = c => (ART[c.g] ? ART[c.g] + " " : "") + c.w;
 
@@ -894,6 +901,7 @@
     badge(dueN);
     $("#main").innerHTML = mode === "learn" ? renderLearn() : mode === "quiz" ? renderQuiz() : mode === "list" ? renderList() : mode === "practice" ? renderPractice() : renderSettings();
     if (mode === "list" && query) applyFilter();
+    markLoading();
     setStatus(status);
   }
 
@@ -901,8 +909,8 @@
     const nb = e.target.closest("nav button");
     if (nb) { mode = nb.dataset.mode; if (mode === "quiz" && !quiz) pickQuiz(); render(); window.scrollTo(0, 0); return; }
     const say = e.target.closest(".say");
-    if (say && say.dataset.t) { e.stopPropagation(); speak(say.dataset.t); return; }
-    if (say) { e.stopPropagation(); const c = mode === "quiz" ? quiz && quiz.c : cur; if (c) speak(say.dataset.say === "ex" ? c.ex : fullWord(c)); return; }
+    if (say && say.dataset.t) { e.stopPropagation(); speak(say.dataset.t, say); return; }
+    if (say) { e.stopPropagation(); const c = mode === "quiz" ? quiz && quiz.c : cur; if (c) speak(say.dataset.say === "ex" ? c.ex : fullWord(c), say); return; }
     const el = e.target.closest("[data-act]"); if (!el) return;
     const act = el.dataset.act;
     if (act === "flip") flip();
@@ -924,7 +932,7 @@
     else if (act === "savecard") doSave();
     else if (act === "del") doDelete(el.dataset.id);
     else if (act === "unq") { unqueue(el.dataset.k); render(); }
-    else if (act === "sayt") { e.stopPropagation(); speak(el.dataset.t); }
+    else if (act === "sayt") { e.stopPropagation(); speak(el.dataset.t, el); }
     else if (act === "remon") remEnable(true);
     else if (act === "remoff") remEnable(false);
     else if (act === "remtest") remTest();

@@ -99,6 +99,7 @@ function makeGemini() {
     const body = JSON.parse(req.postData());
     if (body.generationConfig && body.generationConfig.responseModalities) {
       g.tts.push({ url: req.url(), body });
+      if (g.ttsDelay) await new Promise(r => setTimeout(r, g.ttsDelay));
       if (g.mode === "busy" || g.ttsMode === "busy") return route.fulfill({ status: 503, contentType: "application/json", body: "{}" });
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ candidates: [{ content: { parts: [{ inlineData: { mimeType: "audio/L16;codec=pcm;rate=24000", data: Buffer.alloc(4800).toString("base64") } }] } }] }) });
     }
@@ -508,15 +509,24 @@ const toastOf = async (page, action) => {
     });
     await page.goto(`${ORIGIN}/de-karteikarten/`); await sleep(1200);
     const word = (await page.textContent("#card .word")).replace(/\s+/g, " ").trim();
-    await page.click("#card .say"); await sleep(600);
+    gem.ttsDelay = 1200;
+    await page.click("#card .say"); await sleep(500);
+    const ring = await page.evaluate(() => ({ cls: document.querySelector("#card .say").classList.contains("loading"), busy: document.querySelector("#card .say").getAttribute("aria-busy"), ring: getComputedStyle(document.querySelector("#card .say"), "::after").animationName }));
+    await page.screenshot({ path: SHOTS + "/voice-loading.png", clip: { x: 0, y: 100, width: 390, height: 500 } });
+    await sleep(1300); gem.ttsDelay = 0;
+    const ringGone = await page.evaluate(() => !document.querySelector(".loading"));
+    check("Voice: a ring turns around the speaker while a new voice is made, and goes away", ring.cls && ring.busy === "true" && ring.ring === "spin" && ringGone, { ring, ringGone });
     const first = await page.evaluate(() => ({ played: window.__played.length, src: (window.__played[0] || {}).src || "", said: window.__said.length }));
     const t1 = gem.tts[0];
     check("Voice: first tap asks the cheapest TTS model with only the text", gem.lists === 1 && gem.tts.length === 1 && /gemini-9-flash-lite-tts:generateContent/.test(t1.url) && JSON.stringify(t1.body.contents) === JSON.stringify([{ parts: [{ text: word }] }]), { lists: gem.lists, n: gem.tts.length, url: t1 && t1.url, contents: t1 && t1.body.contents, word });
     check("Voice: the Gemini audio is played, not the device voice", first.played === 1 && first.src.startsWith("blob:") && first.said === 0, first);
     await page.click("#card .say"); await sleep(400);
     await page.goto(`${ORIGIN}/de-karteikarten/`); await sleep(1200);
-    await page.click("#card .say"); await sleep(400);
+    await page.click("#card .say"); await sleep(150);
+    const noRing = await page.evaluate(() => !document.querySelector(".loading"));
+    await sleep(250);
     const again = await page.evaluate(() => window.__played.length);
+    check("Voice: no ring when the voice is already on the phone", noRing);
     check("Voice: the same text again (also after reopening) comes from the device, no new Gemini call", gem.tts.length === 1 && gem.lists === 1 && again === 1, { tts: gem.tts.length, lists: gem.lists, again });
     gem.ttsMode = "busy";
     await page.click("#card"); await sleep(700);
