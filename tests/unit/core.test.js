@@ -1,0 +1,123 @@
+// Unit tests for the pure core modules (node --test tests/unit/). No browser, no network.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { slug, sameStem, topicOf, norm, pk, pkey, fullWord, fill } from "../../src/core/text.js";
+import { INT, recordAnswer, freshCards, dueCards, newToday, allowMoreNew, boxOf } from "../../src/core/leitner.js";
+import { emptyP, merge } from "../../src/core/progress.js";
+import { CardStore } from "../../src/core/store.js";
+import { cardPrompt, cardSchema, phrasePrompt, starterPrompt } from "../../src/core/prompt.js";
+import { diffHTML } from "../../src/core/diff.js";
+import { parseCards, serializeCards, appendCards } from "../../src/services/github.js";
+
+const DAY = 864e5, day = "2026-10-01";
+const cards = () => [
+  { id: "blick", g: "der", w: "Blick", cat: "Wohnen", ar: "نظرة", ex: "Ein <b>Blick</b>.", fam: "blick" },
+  { id: "umziehen", g: "x", w: "umziehen", cat: "Wohnen", ar: "ينقل", ex: "Wir <b>ziehen um</b>.", fam: "ziehen" },
+  { id: "ausblick", g: "der", w: "Ausblick", cat: "Wohnen", ar: "إطلالة", ex: "Toller <b>Ausblick</b>.", fam: "blick" },
+  { id: "miete", g: "die", w: "Miete", cat: "Geld", ar: "إيجار", ex: "Die <b>Miete</b>.", src: "miete" },
+  { id: "alsoich", k: "p", g: "x", w: "Also, ich denke, dass …", cat: "Füllwort", ar: "يعني", ex: "<b>Also, ich denke, dass</b> es geht." }
+];
+
+test("text helpers", () => {
+  assert.equal(slug("Übergröße!"), "uebergroesse");
+  assert.equal(slug("…"), "wort");
+  assert.ok(sameStem("Empfindung", "empfinden"));
+  assert.ok(!sameStem("verlassen", "abwesend"));
+  assert.equal(topicOf([{ cat: "A" }, { cat: "B" }, { cat: "B" }]), "B");
+  assert.equal(norm("Grüße <b>die</b> Fläche"), "grusse die flache");
+  assert.equal(pk("Also, ich denke, dass …"), "also ich denke dass");
+  assert.equal(pkey("die Miete"), "miete");
+  assert.equal(fullWord({ g: "pl", w: "Leute" }), "die Leute");
+  assert.equal(fill("a {x} {y}", { x: 1 }), "a 1 {y}");
+});
+
+test("leitner: answers move through the boxes, wrong answers reset", () => {
+  const P = emptyP(), c = { id: "a" }, now = Date.parse("2026-10-01T10:00:00");
+  const s = recordAnswer(P, c, true, now, day);
+  assert.equal(s.b, 1); assert.equal(P.newDay.n, 1);
+  recordAnswer(P, c, true, now, day); recordAnswer(P, c, true, now, day);
+  assert.equal(P.cards.a.b, 3); assert.equal(P.cards.a.due > now + 6 * DAY, true);
+  recordAnswer(P, c, false, now, day);
+  assert.equal(P.cards.a.b, 0); assert.equal(P.cards.a.due, now); assert.equal(P.cards.a.w, 1);
+  for (let i = 0; i < 10; i++) recordAnswer(P, c, true, now, day);
+  assert.equal(P.cards.a.b, INT.length - 1, "box does not grow past the last interval");
+  assert.equal(P.newDay.n, 1, "a card counts as new only once");
+  recordAnswer(P, { id: "p1", k: "p" }, true, now, day);
+  assert.equal(newToday(P, day, "p"), 1); assert.equal(newToday(P, "2026-10-02"), 0);
+});
+
+test("leitner: fresh cards respect both daily limits, due cards sorted", () => {
+  const P = emptyP(), st = new CardStore(cards());
+  assert.deepEqual(freshCards(st.words, st.phrases, P, day, { words: 2, phrases: 1 }).map(c => c.id), ["blick", "umziehen", "alsoich"]);
+  assert.deepEqual(freshCards(st.words, null, P, day, { words: 10, phrases: 0 }).map(c => c.id), ["blick", "umziehen", "ausblick", "miete"]);
+  P.cards.miete = { b: 1, due: 5, t: 1, n: 1, w: 0 }; P.cards.blick = { b: 1, due: 1, t: 1, n: 1, w: 0 };
+  assert.deepEqual(dueCards(st.all, P, 10).map(c => c.id), ["blick", "miete"]);
+  assert.equal(boxOf(P, st.byId("ausblick")), -1);
+  P.newDay = { d: day, n: 10, p: 2 };
+  allowMoreNew(P, day, 10);
+  assert.deepEqual(P.newDay, { d: day, n: 0, p: 2 });
+});
+
+test("progress merge: newer per-card state wins, same-day counts take the max", () => {
+  const a = emptyP(), b = emptyP();
+  a.cards.x = { b: 2, due: 5, t: 10, n: 2, w: 0 }; b.cards.x = { b: 0, due: 1, t: 20, n: 3, w: 1 };
+  a.cards.y = { b: 1, due: 1, t: 5, n: 1, w: 0 };
+  a.newDay = { d: day, n: 3, p: 1 }; b.newDay = { d: day, n: 5 };
+  a.opts = { slow: true, newPerDay: 5 }; a.updated = 100; b.opts = { newPerDay: 8 }; b.updated = 50;
+  const m = merge(a, b);
+  assert.equal(m.cards.x.t, 20); assert.ok(m.cards.y);
+  assert.deepEqual(m.newDay, { d: day, n: 5, p: 1 });
+  assert.deepEqual(m.opts, { slow: true, newPerDay: 5 }, "options of the newer side win");
+  assert.equal(m.updated, 100);
+});
+
+test("card store: indexes, families in list order, lookups", () => {
+  const st = new CardStore(cards());
+  assert.deepEqual(st.words.map(c => c.id), ["blick", "umziehen", "ausblick", "miete"]);
+  assert.deepEqual(st.phrases.map(c => c.id), ["alsoich"]);
+  assert.deepEqual(st.nouns.map(c => c.id), ["blick", "ausblick", "miete"]);
+  assert.deepEqual(st.relatives(st.byId("blick")).map(c => c.id), ["ausblick"]);
+  assert.deepEqual(st.grouped().map(([c, sub, fam]) => c.id + (sub ? "+" : "") + (fam ? "*" : "")), ["blick*", "ausblick+*", "umziehen", "miete"]);
+  assert.equal(st.famList(), "blick, ziehen, miete");
+  assert.equal(st.topicList(), "Wohnen, Geld");
+  assert.equal(st.phraseGroups(), "Füllwort");
+  assert.ok(st.exists("die Miete")); assert.ok(!st.exists("Mieter"));
+  assert.ok(st.existsP("also ich denke dass")); assert.ok(st.isDone("miete"));
+  assert.equal(st.hay(st.byId("blick")), "der blick نظرة   ein blick.  wohnen blick ");
+  st.push({ id: "neu", g: "x", w: "neu", cat: "Geld", ar: "", ex: "", fam: "blick" });
+  assert.deepEqual(st.family(st.byId("blick")).map(c => c.id), ["blick", "ausblick", "neu"], "indexes rebuild after push");
+  assert.ok(st.remove("neu")); assert.equal(st.byId("neu"), null);
+  const fresh = st.syncWith(cards().filter(c => c.id !== "miete").concat([{ id: "z", g: "x", w: "z", ar: "", ex: "" }]));
+  assert.deepEqual(fresh.map(c => c.id), ["z"]);
+  assert.deepEqual(st.all.map(c => c.id), ["blick", "umziehen", "ausblick", "alsoich", "z"]);
+});
+
+test("prompts: rules filled with the current families and topics", () => {
+  const rules = { intro: "I", w: "w rule", fam: "fams: {fams}", cat: "topics: {topics}", end: "E" };
+  const p = cardPrompt(rules, ["w", "fam", "cat"], "Haus", { fams: "a, b", topics: "T1" });
+  assert.equal(p, 'I\nWort oder Ausdruck: "Haus"\nRegeln:\n- w rule\n- fams: a, b\n- topics: T1\nE');
+  assert.deepEqual(cardSchema(["w", "g", "note", "perf"]).required, ["w", "g"]);
+  assert.deepEqual(cardSchema(["w", "g"]).properties.g.enum, ["der", "die", "das", "pl", "x"]);
+  const ph = { fields: ["w", "cat"], rules: { intro: "PI", w: "pw", cat: "g: {groups}", end: "PE" }, starter: "S" };
+  assert.equal(phrasePrompt(ph, "Also", "A, B"), 'PI\nWendung oder Ausdruck: "Also"\nRegeln:\n- pw\n- g: A, B\nPE');
+  assert.equal(starterPrompt(ph, "A"), "S\nRegeln für jede Wendung:\n- pw\n- g: A\nPE");
+});
+
+test("diff: errors and style improvements are marked word by word", () => {
+  assert.equal(diffHTML("Die Miete ist zu hoch.", "Die Miete ist zu hoch."), "Die Miete ist zu hoch.");
+  const kinds = new Set();
+  const h = diffHTML("Die Miete sind zu hoch", "Die Miete ist wirklich zu hoch.", [{ wrong: "sind", right: "ist", kind: "error" }, { wrong: "", right: "wirklich", kind: "style" }], kinds);
+  assert.equal(h, 'Die Miete <del class="err">sind</del> <ins class="err">ist</ins> <ins class="sty">wirklich</ins> zu hoch<ins class="err">.</ins>');
+  assert.deepEqual([...kinds].sort(), ["err", "sty"]);
+  assert.equal(diffHTML("a <b", "a <c"), 'a &lt;<del class="err">b</del><ins class="err">c</ins>', "HTML in answers is escaped");
+});
+
+test("cards.js: append keeps the file byte for byte, remove rewrites one line per card", () => {
+  const src = "// head\nwindow.CARDS = [\n " + JSON.stringify(cards()[0]) + "\n];\n";
+  const added = { id: "neu", g: "x", w: "neu", ar: "", ex: "" };
+  const out = appendCards(src, [added]);
+  assert.equal(out, src.replace("\n];", ",\n " + JSON.stringify(added) + "\n];"));
+  assert.deepEqual(parseCards(out).map(c => c.id), ["blick", "neu"]);
+  assert.equal(serializeCards("// head\n", parseCards(out).filter(c => c.id !== "blick")), "// head\nwindow.CARDS = [\n " + JSON.stringify(added) + "\n];\n");
+  assert.throws(() => appendCards("nope", []), /format/);
+});

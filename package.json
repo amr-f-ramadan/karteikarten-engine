@@ -1,0 +1,17 @@
+{
+  "name": "karteikarten-engine",
+  "private": true,
+  "type": "module",
+  "description": "Shared engine for de-karteikarten and eman-deutsch. Source in src/, built into app.js.",
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "node build.mjs --check",
+    "test:unit": "node --test tests/unit/*.test.js",
+    "test:e2e": "node tests/e2e.cjs",
+    "test": "npm run check && npm run test:unit && npm run test:e2e"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "playwright": "1.56.1"
+  }
+}
