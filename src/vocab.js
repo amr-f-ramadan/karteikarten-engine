@@ -1,7 +1,8 @@
 // Wortschatz pflegen: neue Karten und Wendungen mit Gemini, Speichern in cards.js, Löschen, Warteliste.
-import { fullWord, sameStem, famKey, topicOf, slug, pkey } from "./core/text.js";
+import { fullWord, pkey } from "./core/text.js";
 import { cardPrompt, cardSchema, phrasePrompt, phraseSchema, starterPrompt, starterSchema, goodPhrase } from "./core/prompt.js";
 import { appendCards, serializeCards, parseCards, headOf } from "./core/cardsfile.js";
+import { freeId, shapeCard } from "./core/newcard.js";
 import { hold } from "./ui/dom.js";
 
 export function createVocab(ctx) {
@@ -13,19 +14,13 @@ export function createVocab(ctx) {
   const genPhrase = w => gemini.generate(phrasePrompt(PH, w, store.phraseGroups()), PSCHEMA, goodPhrase);
   const genStarter = () => gemini.generate(starterPrompt(PH, store.phraseGroups()), starterSchema(PH.fields), a => Array.isArray(a) && a.some(goodPhrase));
 
-  /* Freie id: wie das Wort, bei Doppelten mit Zahl */
-  const freeId = (w, taken, used) => { let id = slug(w), n = 2; while (taken(id) || store.hasId(id) || used.has(id)) id = slug(w) + n++; used.add(id); return id; };
+  /* Freie id in cards.js auf GitHub (taken), im eigenen Bestand und unter den gerade vergebenen (used) */
+  const newId = (w, taken, used) => { const id = freeId(w, x => taken(x) || store.hasId(x) || used.has(x)); used.add(id); return id; };
   async function saveCard(card) {
     const [o] = await github.editCards((src, taken) => {
-      const id = freeId(card.w, taken, new Set());
+      const id = newId(card.w, taken, new Set());
       card.id = id;
-      const o = { id, g: card.g, w: card.w, cat: (card.cat || "").trim() || T("newCat"), hint: card.hint || "", ar: card.ar };
-      if (has("def")) o.def = card.def || "";
-      o.ex = card.ex; if (card.tr) o.tr = card.tr;
-      if (card.perf) o.perf = card.perf; if (card.note) o.note = card.note; if (card.src) o.src = card.src;
-      const fk = (card.fam || "").trim().toLowerCase();
-      if (fk && sameStem(o.w, fk) && (fk !== o.w.toLowerCase() || store.hasFam(fk))) o.fam = fk;
-      if (o.fam) { const kin = store.all.filter(x => famKey(x) === o.fam && x.cat); if (kin.length) o.cat = topicOf(kin); }
+      const o = shapeCard(card, { id, fields: FIELDS, newCat: T("newCat"), store, src: card.src });
       return { out: appendCards(src, [o]), result: [o] };
     }, l => "Neues Wort: " + l[0].w);
     return o;
@@ -33,7 +28,7 @@ export function createVocab(ctx) {
   const savePhrases = items => github.editCards((src, taken) => {
     const used = new Set();
     const list = items.map(p => {
-      const o = { id: freeId(p.w, taken, used), k: "p", g: "x", w: p.w.trim(), cat: (p.cat || "").trim() || T("phNewCat"), ar: p.ar, ex: p.ex };
+      const o = { id: newId(p.w, taken, used), k: "p", g: "x", w: p.w.trim(), cat: (p.cat || "").trim() || T("phNewCat"), ar: p.ar, ex: p.ex };
       if (p.tr) o.tr = p.tr; if (p.note) o.note = p.note; if (p.src) o.src = p.src;
       return o;
     });

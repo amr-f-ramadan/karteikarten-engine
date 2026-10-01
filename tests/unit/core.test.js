@@ -8,6 +8,7 @@ import { CardStore } from "../../src/core/store.js";
 import { cardPrompt, cardSchema, phrasePrompt, starterPrompt } from "../../src/core/prompt.js";
 import { diffHTML } from "../../src/core/diff.js";
 import { parseCards, serializeCards, appendCards } from "../../src/core/cardsfile.js";
+import { freeId, shapeCard } from "../../src/core/newcard.js";
 
 const DAY = 864e5, day = "2026-10-01";
 const cards = () => [
@@ -136,6 +137,18 @@ test("store: only families with a matching stem go into the prompt", () => {
   assert.equal(st.famListFor("ziehen"), "ziehen");
   assert.equal(st.famListFor("Haus"), "keine");
   assert.equal(st.famListFor("شقة"), "keine");
+});
+
+test("new card: id, fields, family and topic are shaped the same way for the app and the tool", () => {
+  const st = new CardStore(cards());
+  assert.equal(freeId("Blick", id => st.hasId(id)), "blick2");
+  assert.equal(freeId("Haus", id => st.hasId(id)), "haus");
+  const gen = { w: "Einblick", g: "der", cat: "", hint: "", ar: "لمحة", def: "D", ex: "Ein <b>Einblick</b>.", tr: "", perf: "", note: "N", fam: "Blick" };
+  const o = shapeCard(gen, { id: "einblick", fields: ["w", "g", "hint", "ar", "def", "ex", "note", "fam", "cat"], newCat: "Neu", store: st, src: "einblick" });
+  assert.deepEqual(o, { id: "einblick", g: "der", w: "Einblick", cat: "Wohnen", hint: "", ar: "لمحة", def: "D", ex: "Ein <b>Einblick</b>.", note: "N", src: "einblick", fam: "blick" }, "family accepted, topic taken from the family");
+  assert.deepEqual(Object.keys(o), ["id", "g", "w", "cat", "hint", "ar", "def", "ex", "note", "src", "fam"], "the app's field order in cards.js");
+  const p = shapeCard({ w: "Haus", g: "das", ar: "بيت", ex: "x", fam: "wohnen", def: "D" }, { id: "haus", fields: ["w", "g", "hint", "ar", "ex"], newCat: "Neu", store: st });
+  assert.deepEqual(p, { id: "haus", g: "das", w: "Haus", cat: "Neu", hint: "", ar: "بيت", ex: "x" }, "no def without the field, a family with another stem is dropped, topic falls back");
 });
 
 test("progress: done waitlist entries older than 30 days are pruned", () => {
