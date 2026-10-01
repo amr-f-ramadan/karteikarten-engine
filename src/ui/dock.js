@@ -16,8 +16,12 @@ export function createDock(ctx, nav) {
   }));
   const knob = document.createElement("button");
   knob.className = "knob"; knob.setAttribute("aria-expanded", "false");
-  knob.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"></svg><span class="kbadge" hidden></span>';
+  knob.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"></svg><span class="kbadge" id="kbadge" hidden></span>';
+  knob.setAttribute("aria-describedby", "kbadge"); // aria-label verdeckt den Inhalt: die Zahl wird so trotzdem vorgelesen
   nav.after(knob); nav.setAttribute("aria-hidden", "true");
+  // Geschlossen ist die Pille unsichtbar: ihre Knöpfe dürfen dann nicht per Tab erreichbar sein
+  const setTabs = open => items.forEach(b => { b.tabIndex = open ? 0 : -1; });
+  setTabs(false);
 
   const mod = i => ((i % N) + N) % N;
   const dir = () => (getComputedStyle(nav).direction === "rtl" ? -1 : 1);
@@ -36,13 +40,13 @@ export function createDock(ctx, nav) {
   }
   const stopGlide = () => { if (anim) cancelAnimationFrame(anim); anim = null; };
   /* Nach dem Loslassen gleitet die Reihe Bild für Bild, dieselbe Bewegung wie beim Wischen: nichts springt */
-  function glideTo(target) {
+  function glideTo(target, done) {
     stopGlide();
     const from = pos, dist = target - from, dur = glideDuration(dist), t0 = performance.now();
     const step = now => {
       const k = Math.min(1, (now - t0) / dur);
       pos = from + dist * (1 - Math.pow(1 - k, 3)); place();
-      if (k < 1) anim = requestAnimationFrame(step); else { anim = null; pos = target; place(); }
+      if (k < 1) anim = requestAnimationFrame(step); else { anim = null; pos = target; place(); if (done) done(); }
     };
     anim = requestAnimationFrame(step);
   }
@@ -51,12 +55,14 @@ export function createDock(ctx, nav) {
     clearTimeout(idleT); clearTimeout(closeT);
     nav.classList.toggle("open", open); nav.setAttribute("aria-hidden", String(!open));
     knob.setAttribute("aria-expanded", String(open)); document.body.classList.toggle("dock-open", open);
-    if (open) { stopGlide(); pos = current(); place(); idle(); }
+    setTabs(open);
+    if (open) { stopGlide(); pos = current(); place(); items[current()].focus({ preventScroll: true }); idle(); }
+    else if (nav.contains(document.activeElement)) knob.focus({ preventScroll: true });
   }
-  function pick(target, how) {
-    glideTo(target);
-    ctx.go(items[mod(target)].dataset.mode);
-    clearTimeout(idleT); clearTimeout(closeT); closeT = setTimeout(() => setOpen(false), how === "tap" ? 240 : 520);
+  /* Erst landet die Reihe, dann wechselt die Ansicht und die Pille sinkt: kein Neuzeichnen, während sie gleitet */
+  function pick(target) {
+    clearTimeout(idleT); clearTimeout(closeT);
+    glideTo(target, () => { ctx.go(items[mod(target)].dataset.mode); closeT = setTimeout(() => setOpen(false), 160); });
   }
 
   nav.addEventListener("pointerdown", e => {
@@ -72,6 +78,8 @@ export function createDock(ctx, nav) {
     lastX = e.clientX; lastT = now;
     pos = startPos - dx * dir() / SLOT; place();
   });
+  // Der ganzzahlige Platz, an dem ein Knopf an seiner nächsten Runde liegt (pos kann mitten im Gleiten gebrochen sein)
+  const slotOf = b => Math.round(pos + nearestTurn(items.indexOf(b) - pos, N));
   // Mit Pointer Capture landen alle Ereignisse auf der nav, darum wird der getippte Knopf unter dem Finger gesucht
   const itemAt = e => { const el = document.elementFromPoint(e.clientX, e.clientY), b = el && el.closest("button[data-mode]"); return b && items.includes(b) ? b : null; };
   /* Auch ein abgebrochener Touch (der Browser nahm die Geste) landet auf einem Symbol, nie dazwischen */
@@ -80,15 +88,23 @@ export function createDock(ctx, nav) {
     // Kein Schnipp nach einer Pause vor dem Loslassen, und keiner, wenn der Browser die Geste abgebrochen hat
     if (e.type !== "pointerup" || lastRelease - lastT > 80) vel = 0;
     const tapped = !moved && e.type === "pointerup" ? itemAt(e) : null;
-    if (tapped) pick(Math.round(pos) + nearestTurn(items.indexOf(tapped) - pos, N), "tap");
-    else pick(settleTarget(pos, vel, 1 / SLOT, dir()), moved ? "swipe" : "tap");
+    if (tapped) pick(slotOf(tapped));
+    else pick(settleTarget(pos, vel, 1 / SLOT, dir()));
   }
   ["pointerup", "pointercancel", "lostpointercapture"].forEach(t => nav.addEventListener(t, release));
   /* Tastatur (Enter auf einem Knopf) und ein Touch, den der Browser anders beendet: der Klick wählt trotzdem */
   nav.addEventListener("click", e => {
     if (performance.now() - lastRelease < 120) return;
     const b = e.target.closest("button[data-mode]"); if (!b) return;
-    active = false; pick(Math.round(pos) + nearestTurn(items.indexOf(b) - pos, N), "tap");
+    active = false; pick(slotOf(b));
+  });
+  /* Pfeiltasten drehen die Reihe (in RTL gespiegelt), Escape schließt */
+  nav.addEventListener("keydown", e => {
+    if (e.key === "Escape") { e.preventDefault(); setOpen(false); return; }
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault(); stopGlide(); idle();
+    const target = Math.round(pos) + (e.key === "ArrowRight" ? 1 : -1) * dir();
+    glideTo(target); items[mod(target)].focus({ preventScroll: true });
   });
   knob.addEventListener("click", () => setOpen(true));
 

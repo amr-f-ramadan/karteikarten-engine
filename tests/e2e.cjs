@@ -235,18 +235,21 @@ const toastOf = async (page, action) => {
     check("Eman: service worker registered for /eman-deutsch/", sw === `${ORIGIN}/eman-deutsch/`, sw);
 
     // Lens dock: one knob with the current view, a pill that rises, turns without end and sinks again
-    const knob = await page.evaluate(() => { const k = document.querySelector(".knob"), nav = document.querySelector("nav"); return { label: k && k.getAttribute("aria-label"), icon: !!(k && k.querySelector("svg path, svg rect")), badge: k && k.querySelector(".kbadge").textContent, navBadge: document.querySelector("#badge").textContent, open: nav.classList.contains("open") }; });
+    const knob = await page.evaluate(() => { const k = document.querySelector(".knob"), nav = document.querySelector("nav"); return { label: k && k.getAttribute("aria-label"), icon: !!(k && k.querySelector("svg path, svg rect")), badge: k && k.querySelector(".kbadge").textContent, navBadge: document.querySelector("#badge").textContent, open: nav.classList.contains("open"), describedBy: k && k.getAttribute("aria-describedby") === k.querySelector(".kbadge").id, untabbable: [...nav.querySelectorAll("button")].every(b => b.tabIndex === -1) }; });
     // (the settings tab is open at this point; a swipe to the right in RTL moves on to the next view, which wraps round to learn)
     check("Eman: the knob shows the current view (Arabic label, icon, due count), pill closed", knob.label === "الإعدادات" && knob.icon && knob.badge === knob.navBadge && !knob.open, knob);
+    check("Eman: the knob's count is announced with it, the hidden pill's buttons are out of the Tab order", knob.describedBy && knob.untabbable, knob);
     const openDock = async () => { await page.click(".knob"); await page.waitForFunction(() => document.querySelector("nav").classList.contains("open")); await sleep(450); }; // let the pill finish rising
     await openDock();
     const bb = await (await page.$("nav")).boundingBox(), midX = bb.x + bb.width / 2, midY = bb.y + bb.height / 2;
     await page.mouse.move(midX, midY); await page.mouse.down();
     for (let i = 1; i <= 9; i++) { await page.mouse.move(midX + i * 8, midY); await sleep(40); }
-    await sleep(120); await page.mouse.up();
+    await sleep(120); await page.mouse.up(); await sleep(40);
+    const early = await page.evaluate(() => document.querySelector("nav button[aria-current=page]").dataset.mode); // the row is still gliding: no switch yet
     await page.waitForFunction(() => !document.querySelector("nav").classList.contains("open"), null, { timeout: 3000 });
-    const swiped = await page.evaluate(() => ({ mode: document.querySelector("nav button[aria-current=page]").dataset.mode, card: !!document.querySelector("#card"), knob: document.querySelector(".knob").getAttribute("aria-label") }));
-    check("Eman: a swipe to the right (RTL) settles on the next view round the loop, switches to it and the pill sinks", swiped.mode === "learn" && swiped.card && swiped.knob === "مذاكرة", swiped);
+    const swiped = await page.evaluate(() => ({ early: null, mode: document.querySelector("nav button[aria-current=page]").dataset.mode, card: !!document.querySelector("#card"), knob: document.querySelector(".knob").getAttribute("aria-label") }));
+    swiped.early = early;
+    check("Eman: a swipe to the right (RTL) settles on the next view round the loop, then switches to it and the pill sinks", early === "settings" && swiped.mode === "learn" && swiped.card && swiped.knob === "مذاكرة", swiped);
     await openDock();
     await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange"))); await sleep(700); // a sync and its render while the pill is open
     check("Eman: a render while the pill is open leaves it open", await navOpen(page));
@@ -255,12 +258,18 @@ const toastOf = async (page, action) => {
     await openDock();
     await page.mouse.move(midX, midY); await page.mouse.down(); await page.mouse.move(midX + 30, midY);
     await page.evaluate(() => document.querySelector("nav").dispatchEvent(new PointerEvent("pointercancel", { bubbles: true })));
-    await page.mouse.up(); await sleep(700);
+    await page.mouse.up(); await sleep(1000);
     const cancelled = await page.evaluate(() => ({ open: document.querySelector("nav").classList.contains("open"), mode: document.querySelector("nav button[aria-current=page]").dataset.mode }));
     check("Eman: a cancelled touch still settles on an icon and the pill sinks", !cancelled.open && cancelled.mode === "learn", cancelled);
-    await page.focus('nav button[data-mode="list"]'); await page.keyboard.press("Enter"); await sleep(400);
-    const entered = await page.evaluate(() => [document.querySelector("nav button[aria-current=page]").dataset.mode, document.querySelector("nav").classList.contains("open")]);
-    check("Eman: Enter on a focused tab button switches the view with the pill closed", entered.join() === "list,false", entered);
+    // Keyboard: Enter on the knob opens the pill with focus on the current view, arrows turn it, Enter picks, focus returns to the knob
+    await page.focus(".knob"); await page.keyboard.press("Enter"); await page.waitForFunction(() => document.querySelector("nav").classList.contains("open")); await sleep(450);
+    const focused = await page.evaluate(() => document.activeElement.dataset.mode);
+    await page.keyboard.press("ArrowLeft"); await sleep(300); await page.keyboard.press("ArrowLeft"); await sleep(300);
+    const centred = await page.evaluate(() => document.querySelector("nav button.on").dataset.mode);
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => !document.querySelector("nav").classList.contains("open"), null, { timeout: 3000 });
+    const entered = await page.evaluate(() => [document.querySelector("nav button[aria-current=page]").dataset.mode, document.activeElement.className]);
+    check("Eman: keyboard: Enter on the knob opens the pill on the current view, arrows turn it (RTL), Enter picks, focus returns to the knob", focused === "learn" && centred === "list" && entered[0] === "list" && entered[1] === "knob", { focused, centred, entered });
     await tab(page, "learn");
 
     // Learn: front, flip animation, back with tr + family chips + topic
