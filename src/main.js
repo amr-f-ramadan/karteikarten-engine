@@ -50,6 +50,7 @@ ctx.push = createPush({ T, vapid: C.vapid, local, github: ctx.github, getToken: 
 ctx.vocab = createVocab(ctx);
 
 const router = createRouter(ctx);
+ctx.go = mode => router.go(mode);
 [createLearnView, createQuizView, createListView, createPracticeView, createSettingsView].forEach(make => router.register(make(ctx)));
 
 /* Kein Zoomen: Pinch, Doppeltippen und Auto-Zoom in Eingabefeldern verhindern */

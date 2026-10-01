@@ -21,9 +21,15 @@ export function createRouter(ctx) {
     ctx.sync.setStatus(S.sync.status);
   }
 
+  /* Ansicht wechseln: der eine Weg für Tab-Leiste und Dock */
+  function go(mode) {
+    S.mode = mode; const v = views[mode]; if (v && v.enter) v.enter();
+    render(); window.scrollTo(0, 0);
+  }
+
   document.addEventListener("click", e => {
     const nb = e.target.closest("nav button");
-    if (nb) { S.mode = nb.dataset.mode; const v = views[S.mode]; if (v && v.enter) v.enter(); render(); window.scrollTo(0, 0); return; }
+    if (nb) { go(nb.dataset.mode); return; }
     if (isHolding() && e.target.closest("#main")) { e.preventDefault(); e.stopPropagation(); return; }
     const say = e.target.closest(".say");
     if (say && say.dataset.t) { e.stopPropagation(); ctx.voice.speak(say.dataset.t, say); return; }
@@ -39,5 +45,5 @@ export function createRouter(ctx) {
     if (isHolding() && !/INPUT|TEXTAREA/.test(e.target.tagName)) { e.preventDefault(); return; }
     const v = current(); if (v.keys) v.keys(e);
   });
-  return { register, render };
+  return { register, render, go };
 }
