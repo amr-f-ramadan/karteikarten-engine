@@ -175,3 +175,13 @@ When a rule here conflicts with a convenient shortcut, the rule wins. When two r
 
 Say what is uncertain (iOS behaviour, Gemini model names, pricing, API details) instead of guessing; verify in
 code or tests where possible; otherwise ask a short, specific question before building on an assumption.
+
+## Working method (Superpowers skills)
+
+The folder `.claude/skills/` holds the Superpowers skills (brainstorming, writing-plans, executing-plans,
+test-driven-development, systematic-debugging, verification-before-completion, requesting/receiving-code-review,
+finishing-a-development-branch, subagent-driven-development, and others). At the start of every session, read
+`.claude/skills/using-superpowers/SKILL.md` and follow it: check for a matching skill before any task, brainstorm
+before building a feature, plan before executing, test first for core logic, debug systematically, and verify before
+reporting done. Where a skill and the rules above differ (branching, merging only on request, texts in both apps,
+the fingerprint), the rules above win.
