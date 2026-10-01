@@ -11,7 +11,7 @@ import { CardStore } from "../src/core/store.js";
 import { parseCards } from "../src/core/cardsfile.js";
 import { dueCards, freshCards } from "../src/core/leitner.js";
 import { optOf } from "../src/core/progress.js";
-import { isP } from "../src/core/text.js";
+import { isP, today as dayIn } from "../src/core/text.js";
 
 const force = process.env.FORCE === "true";
 const git = f => { try { return execSync(`git show origin/progress:${f}`, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }); } catch { return null; } };
@@ -22,7 +22,7 @@ const tz = push.tz || "Europe/Berlin";
 const parts0 = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).formatToParts(new Date()).map(p => [p.type, p.value]));
 const nowMin = (Number(parts0.hour) % 24) * 60 + Number(parts0.minute), nowSec = Number(parts0.second);
 const target = Number(push.hour) * 60 + Number(push.minute || 0);
-const today = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
+const today = dayIn(tz); // derselbe Tag wie in der App (Tageslimit), in der Zone des Telefons
 const sent = JSON.parse(git("sent.json") || "null");
 const pad = n => String(n).padStart(2, "0");
 const at = `${pad(Math.floor(target / 60))}:${pad(target % 60)}`;

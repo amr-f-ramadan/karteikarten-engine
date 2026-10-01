@@ -53,7 +53,7 @@ function makeGitHub(repo, files) {
     const entry = { method, path: url.pathname, ref: url.searchParams.get("ref") };
     if (req.postData()) { try { entry.body = JSON.parse(req.postData()); } catch (e) { entry.body = req.postData(); } }
     log.push(entry);
-    const json = (status, obj) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(obj) });
+    const json = (status, obj, headers) => { entry.status = status; return route.fulfill({ status, contentType: "application/json", body: JSON.stringify(obj), headers }); };
     if (!url.pathname.startsWith(base)) return json(404, { message: "Not Found" });
     const rest = url.pathname.slice(base.length);
     if (rest === "git/ref/heads/main") return json(200, { object: { sha: "mainsha" } });
@@ -62,8 +62,12 @@ function makeGitHub(repo, files) {
     const file = mm[1];
     if (method === "GET") {
       const branch = entry.ref || "main", k = branch + ":" + file;
+      entry.inm = req.headers()["if-none-match"] || null;
       if (!store[k]) return json(404, { message: "Not Found" });
-      return json(200, { sha: store[k].sha, content: b64(store[k].content), encoding: "base64" });
+      // like GitHub: a weak ETag per content, exposed to cross-origin fetch; a matching If-None-Match gets 304 without a body
+      const etag = 'W/"' + store[k].sha + '"';
+      if (entry.inm === etag) { entry.status = 304; return route.fulfill({ status: 304 }); }
+      return json(200, { sha: store[k].sha, content: b64(store[k].content), encoding: "base64" }, { ETag: etag, "Access-Control-Expose-Headers": "ETag" });
     }
     if (method === "PUT") {
       const b = entry.body, k = (b.branch || "main") + ":" + file;
@@ -111,8 +115,8 @@ function makeGemini() {
   return g;
 }
 
-async function newPage(browser, { storage = {}, dark = false, standalone = false, reduced = false } = {}) {
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: dark ? "dark" : "light", reducedMotion: reduced ? "reduce" : "no-preference", locale: "ar-EG" });
+async function newPage(browser, { storage = {}, dark = false, standalone = false, reduced = false, tz = undefined } = {}) {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: dark ? "dark" : "light", reducedMotion: reduced ? "reduce" : "no-preference", locale: "ar-EG", timezoneId: tz });
   await ctx.addInitScript(([st, sa]) => {
     if (!sessionStorage.getItem("__seeded")) { for (const [k, v] of Object.entries(st)) localStorage.setItem(k, v); sessionStorage.setItem("__seeded", "1"); }
     if (sa) { const mm = window.matchMedia.bind(window); window.matchMedia = q => q.includes("display-mode: standalone") ? { matches: true, media: q, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} } : mm(q); }
@@ -391,6 +395,10 @@ const toastOf = async (page, action) => {
     const phPrompt = ptext(gem.calls.filter(c => ptext(c.body).includes("Wendung oder Ausdruck")).pop().body);
     check("Eman: phrase prompt is in her style (Egyptian Arabic, tr field, phrase groups)", /Ägypterin/.test(phPrompt) && /- tr:/.test(phPrompt) && /- cat: wofür/.test(phPrompt) && !/Wortfamilie/.test(phPrompt), phPrompt.slice(0, 300));
     check("Eman: the phrase is saved to cards.js as k: p with its source", phPut && phPut.body.message === "Neue Wendung: mir wirklich zu hoch" && phLine === ' ' + JSON.stringify({ id: "mirwirklichzuhoch", k: "p", g: "x", w: "mir wirklich zu hoch", cat: "إبداء الرأي", ar: PH_ONE.ar, ex: PH_ONE.ex, tr: PH_ONE.tr, src: "mir wirklich zu hoch" }), phLine);
+    // cards.js was read by the waitlist worker and again before the save: that read carries the ETag and gets a 304, no download
+    // (the ETags live in memory, so the first read after the reload above is a plain one)
+    const reads = gh.log.filter(e => e.method === "GET" && e.path.endsWith("/cards.js")), lastRead = reads[reads.length - 1];
+    check("GitHub: an unchanged cards.js is asked for with its ETag and answered with 304, not downloaded again", reads.length >= 2 && !!lastRead.inm && lastRead.status === 304, reads.map(e => [e.inm, e.status]));
 
     // Phrases list: separate from the word list, starter set from Gemini
     await tab(page, "list");
@@ -473,15 +481,23 @@ const toastOf = async (page, action) => {
     await ctx.close();
   }
 
-  // A known card (box 2) is shown meaning first, to be said in German, with the 5 second bar
+  // A known card (box 2) is shown meaning first, to be said in German, with the 5 second bar.
+  // The phone is in UTC+14 at 20:00 UTC: for it the day is already the 2nd, so the daily limit of the 2nd is the one used up (n: 99)
   {
-    const prog = { v: 1, cards: { stabil: { b: 2, due: 1, t: 1, n: 2, w: 0 } }, art: {}, pending: {}, newDay: { d: new Date().toISOString().slice(0, 10), n: 99 }, opts: {}, updated: 1 };
-    const { ctx, page } = await newPage(browser, { storage: { "kk-eman-v2": JSON.stringify(prog) } });
+    const prog = { v: 1, cards: { stabil: { b: 2, due: 1, t: 1, n: 2, w: 0 } }, art: {}, pending: {}, newDay: { d: "2026-10-02", n: 99 }, opts: {}, updated: 1 };
+    const { ctx, page } = await newPage(browser, { storage: { "kk-eman-v2": JSON.stringify(prog) }, tz: "Pacific/Kiritimati" });
+    await page.clock.setFixedTime(new Date("2026-10-01T20:00:00Z"));
     await page.goto(`${ORIGIN}/eman-deutsch/`); await sleep(800);
     const front = await page.evaluate(() => ({ ar: (document.querySelector("#card .ar-big") || {}).textContent, timer: !!document.querySelector("#card .timer"), hint: (document.querySelector("#card .hint") || {}).textContent }));
     check("Eman: known card shows meaning first, asks for a German sentence, with timer", front.ar === "متين / ثابت" && front.timer && front.hint === "قوليها بالألماني في جملة كاملة", front);
     await grab(page, "learn-production");
     await page.screenshot({ path: SHOTS + "/light-10-production.png" });
+    // Only the due card is left (no new ones: today's limit is used up); "more new words" then writes today's date into the progress
+    await page.click("#card"); await sleep(450); await page.click('[data-act="yes"]'); await sleep(100);
+    const more = await page.$('[data-act="more"]');
+    if (more) { await more.click(); await sleep(100); }
+    const nd = JSON.parse(await page.evaluate(() => localStorage.getItem("kk-eman-v2"))).newDay;
+    check("Eman: the day of the daily limit is the phone's local date (the 2nd in UTC+14), not the UTC date", !!more && nd.d === "2026-10-02" && nd.n === 89, { done: !!more, nd });
     await ctx.close();
   }
 

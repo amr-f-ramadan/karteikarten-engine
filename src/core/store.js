@@ -25,6 +25,7 @@ export class CardStore {
   family(c) { return isP(c) ? [c] : this.idx.byFam.get(famKey(c)) || [c]; }
   relatives(c) { return this.family(c).filter(x => x !== c); }
   hasFam(k) { return this.idx.byFam.has(k); }
+  famMembers(k) { return this.idx.byFam.get(k) || []; }
   famList() { return [...this.idx.byFam.keys()].join(", "); }
   /* Nur Familien, deren Stamm zum neuen Wort passt (so wie saveCard sie auch annimmt); der Auftrag wächst nicht mit dem Wortschatz */
   famListFor(word) { const keys = [...this.idx.byFam.keys()].filter(k => sameStem(word, k) || sameStem(k, word)); return keys.length ? keys.join(", ") : "keine"; }

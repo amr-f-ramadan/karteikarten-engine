@@ -8,7 +8,7 @@ import vm from "node:vm";
 import { CardStore } from "../src/core/store.js";
 import { parseCards, appendCards } from "../src/core/cardsfile.js";
 import { cardPrompt, cardSchema, goodCard } from "../src/core/prompt.js";
-import { slug, sameStem, famKey, topicOf } from "../src/core/text.js";
+import { freeId, shapeCard } from "../src/core/newcard.js";
 import { createGemini } from "../src/services/gemini.js";
 
 const key = process.env.GEMINI_KEY, gh = process.env.GITHUB_TOKEN, repo = process.env.GITHUB_REPOSITORY;
@@ -34,15 +34,7 @@ const added = [];
 for (const [k, s] of todo) {
   const c = await gen(s.w);
   if (!goodCard(c)) { console.log(`Noch nicht möglich: ${s.w}`); continue; }
-  let id = slug(c.w), n = 2;
-  while (store.hasId(id)) id = slug(c.w) + n++;
-  const o = { id, g: c.g, w: c.w, cat: (c.cat || "").trim() || APP.t.newCat, hint: c.hint || "", ar: c.ar };
-  if (FIELDS.includes("def")) o.def = c.def || "";
-  o.ex = c.ex; if (c.tr) o.tr = c.tr; o.src = k;
-  if (c.perf) o.perf = c.perf; if (c.note) o.note = c.note;
-  const fk = (c.fam || "").trim().toLowerCase();
-  if (fk && sameStem(o.w, fk) && (fk !== o.w.toLowerCase() || store.hasFam(fk))) o.fam = fk;
-  if (o.fam) { const kin = store.all.filter(x => famKey(x) === o.fam && x.cat); if (kin.length) o.cat = topicOf(kin); }
+  const o = shapeCard(c, { id: freeId(c.w, id => store.hasId(id)), fields: FIELDS, newCat: APP.t.newCat, store, src: k });
   if (store.exists(o.w)) { console.log(`Schon vorhanden: ${o.w}`); continue; }
   store.push(o); added.push(o);
   src = appendCards(src, [o]);

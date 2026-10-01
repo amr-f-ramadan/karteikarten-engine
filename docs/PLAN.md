@@ -78,7 +78,7 @@ Each step ends with `npm test` green (build check, unit tests, 74 e2e checks).
 2. **Split without behaviour change** (S1, S6): move code into the modules above; bundle must pass all e2e checks with the de-karteikarten fingerprint unchanged.
 3. **Card store with indexes** (P2, P5, P11): one `CardStore` with cached `words`, `phrases`, `nouns`, `byId`, `byFam`, `byTopic`, precomputed search text; every mutation (add, remove, refresh) goes through it and invalidates. List rendering becomes O(N).
 4. **Render cost** (P1, P3, P4): derived counts computed once per render; list rows lose `backdrop-filter` (flat translucent glass, same colours); topics collapse by default above 150 cards, search expands; `.hold`/loading state no longer re-queries the whole DOM.
-5. **Network** (P6): `cards.js` and `progress.json` fetched with `If-None-Match`; a 304 costs no rate limit and no download. `refreshCards` first compares the `main` commit sha.
+5. **Network** (P6): `cards.js` and `progress.json` fetched with `If-None-Match`; a 304 costs no rate limit and no download, so `refreshCards` needs no separate check of the `main` commit (the contents ETag changes with the file).
 6. **Progress hygiene** (P7): `done` pending entries older than 30 days pruned on merge; `writeLocal` debounced through `requestIdleCallback`/timeout so answering stays instant.
 7. **Voice cache cap** (P9): IndexedDB entries carry a timestamp; above 150 MB (estimate from blob sizes) the oldest are dropped.
 8. **Prompt size** (P10): only families whose stem overlaps the new word are listed (topics stay complete, they are few). Changes the de-karteikarten fingerprint on purpose.
@@ -99,5 +99,6 @@ pruned after 30 days; voice cache capped at 150 MB; the new-card prompt lists on
 Not changed, on purpose: `writeLocal` stays synchronous (iOS can end a home-screen app at any moment; a debounce
 could lose the last answer); `cards.js` stays a JS file (format change would touch both app repos and their history).
 
-Noticed, not changed (separate decision): the app's "today" for daily limits is the UTC date (`toISOString`), the
-reminder tool uses the phone's time zone; between midnight and 02:00 local time the two can disagree by a day.
+Resolved afterwards: the app's "today" for daily limits was the UTC date (`toISOString`) while the reminder tool
+used the phone's time zone, so between midnight and 02:00 local time the two disagreed by a day. Now both use
+`core/text.today(tz)`: the device's local date in the app, the zone from `push.json` in the reminder.

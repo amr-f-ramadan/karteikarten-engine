@@ -1,7 +1,15 @@
 // Reine Textfunktionen, ohne DOM: gemeinsam für die App und die Node-Werkzeuge.
 export const ART = { der: "der", die: "die", das: "das", pl: "die", x: "" };
 export const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-export const today = () => new Date().toISOString().slice(0, 10);
+/* Heutiges Datum (JJJJ-MM-TT) in der Zeitzone des Geräts; tz für die Erinnerung, die mit der Zone des Telefons aus push.json rechnet.
+   Feste Sprache en-GB: in arabischer Spracheinstellung kämen sonst arabische Ziffern. */
+const dayFmts = new Map();
+export function today(tz, now = new Date()) {
+  let f = dayFmts.get(tz || "");
+  if (!f) dayFmts.set(tz || "", f = new Intl.DateTimeFormat("en-GB", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }));
+  const p = {}; for (const x of f.formatToParts(now)) p[x.type] = x.value;
+  return p.year + "-" + p.month + "-" + p.day;
+}
 export const startOfDay = ts => { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); };
 export const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 export const pickOne = a => a[Math.floor(Math.random() * a.length)];
