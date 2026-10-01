@@ -148,6 +148,11 @@ const toastOf = async (page, action) => {
     "de-karteikarten": { dir: AMR, over: { "cards.js": AMR_CARDS } }
   };
   if (CAPTURE) mounts["amr-capture"] = { dir: CAPTURE, over: { "cards.js": AMR_CARDS } };
+  // A long word list (Eman's cards plus synthetic ones) for the collapsing topics
+  const bigCards = loadCards(fs.readFileSync(EMAN_CARDS, "utf8")).concat(Array.from({ length: 160 }, (_, i) => ({ id: "syn" + i, g: "x", w: "synthetisch" + i, cat: "موضوع " + (i % 6), ar: "تجريبي", ex: "x", tr: "x" })));
+  const BIG_CARDS = path.join(SHOTS, "big-cards.js");
+  fs.writeFileSync(BIG_CARDS, "window.CARDS = " + JSON.stringify(bigCards) + ";\n");
+  mounts["eman-big"] = { dir: EMAN, over: { "cards.js": BIG_CARDS } };
   const srv = await serve(8123, mounts);
   const ORIGIN = "http://127.0.0.1:8123";
 
@@ -286,7 +291,8 @@ const toastOf = async (page, action) => {
     const req = gem.calls[gem.calls.length - 1].body;
     const prompt = req.contents[0].parts[0].text, schema = req.generationConfig.responseSchema;
     check("Eman: prompt asks for Egyptian Arabic and her rules", /Ägypterin/.test(prompt) && /tr: die Übersetzung des Beispielsatzes auf Ägyptisch-Arabisch/.test(prompt) && !/- def:/.test(prompt) && !/- perf:/.test(prompt), prompt);
-    check("Eman: prompt lists her Arabic topics and families", prompt.includes("السكن") && prompt.includes("كلمات وتعبيرات مهمة") && prompt.includes("räumen"), prompt.split("\n").filter(l => /Schon/.test(l)));
+    // families are listed only when their stem matches the new word (none for "umziehen"), topics always
+    check("Eman: prompt lists her Arabic topics, families only with a matching stem", prompt.includes("السكن") && prompt.includes("كلمات وتعبيرات مهمة") && /Wortfamilien: keine\./.test(prompt) && !prompt.includes("räumen"), prompt.split("\n").filter(l => /Schon/.test(l)));
     check("Eman: schema = her fields (tr required, no def/perf)", JSON.stringify(Object.keys(schema.properties)) === JSON.stringify(["w", "g", "hint", "ar", "ex", "tr", "note", "fam", "cat"]) && JSON.stringify(schema.required) === JSON.stringify(["w", "g", "hint", "ar", "ex", "tr", "fam", "cat"]), schema);
     const formIds = await page.$$eval(".preview [id]", els => els.map(e => e.id));
     check("Eman: add form shows tr, hides def/perf", JSON.stringify(formIds) === JSON.stringify(["f_w", "f_g", "f_hint", "f_ar", "f_ex", "f_tr", "f_note", "f_cat", "f_fam"]), formIds);
@@ -506,6 +512,26 @@ const toastOf = async (page, action) => {
     await ctx.close();
   }
 
+  // ===================== Long lists: topics collapse above 150 rows, search opens them, a tap toggles =====================
+  {
+    const { ctx, page } = await newPage(browser, {});
+    await page.goto(`${ORIGIN}/eman-big/`); await sleep(1200);
+    await tab(page, "list");
+    const big = await page.evaluate(() => ({ total: document.querySelectorAll(".topic").length, coll: document.querySelectorAll(".topic.coll").length, closed: document.querySelectorAll(".topic.closed").length, firstOpen: !document.querySelector(".topic").classList.contains("closed"), rows: document.querySelectorAll(".list li").length }));
+    check("Long list: all topics collapsible, all but the first closed", big.total > 2 && big.coll === big.total && big.closed === big.total - 1 && big.firstOpen && big.rows === 214, big);
+    await page.fill("#q", "synthetisch159"); await sleep(120);
+    const found = await page.evaluate(() => ({ open: [...document.querySelectorAll(".topic:not([hidden])")].map(s => s.classList.contains("closed")), hits: document.querySelectorAll(".list li:not([hidden])").length }));
+    check("Long list: search shows the hit with its topic opened", found.hits === 1 && found.open.length === 1 && found.open[0] === false, found);
+    await page.fill("#q", ""); await sleep(120);
+    const back = await page.evaluate(() => document.querySelectorAll(".topic.closed").length);
+    await page.click(".topic.closed h3");
+    const toggled = await page.evaluate(() => document.querySelectorAll(".topic.closed").length);
+    check("Long list: clearing the search closes the topics again, a tap opens one", back === big.total - 1 && toggled === big.total - 2, { back, toggled });
+    await page.screenshot({ path: SHOTS + "/light-11-biglist.png", clip: { x: 0, y: 0, width: 390, height: 844 } });
+    check("Long list: no page errors", !page.errors.length, page.errors);
+    await ctx.close();
+  }
+
   // ===================== Voice: Gemini speech, made once per text and kept on the device =====================
   {
     const gem = makeGemini();
@@ -539,14 +565,16 @@ const toastOf = async (page, action) => {
     check("Voice: the same text again (also after reopening) comes from the device, no new Gemini call", gem.tts.length === 1 && gem.lists === 1 && again === 1, { tts: gem.tts.length, lists: gem.lists, again });
     // Article quiz: the word is spoken after answering; while its voice is made, the quiz waits
     await tab(page, "quiz");
+    const freeOf = () => page.waitForFunction(() => !document.body.classList.contains("hold"), null, { timeout: 15000 });
+    await freeOf(); // a hold from an earlier step would swallow the tap below
     const qWord = await page.textContent(".card.quiz .word");
     gem.ttsDelay = 1500;
-    await page.click('.arts [data-g="der"]'); await sleep(400);
+    await page.click('.arts [data-g="der"]'); await page.waitForSelector(".arts .right", { timeout: 5000 }); await sleep(300);
     const qHold = await page.evaluate(() => ({ hold: document.body.classList.contains("hold"), ring: !!document.querySelector(".card.quiz .say.loading"), dim: getComputedStyle(document.querySelector('[data-act="nextq"]')).opacity }));
     await page.screenshot({ path: SHOTS + "/voice-quiz-hold.png", clip: { x: 0, y: 60, width: 390, height: 560 } });
     await page.click('[data-act="nextq"]'); await sleep(100);
     const qSame = (await page.textContent(".card.quiz .word")).includes(qWord.replace("___", "").trim());
-    await sleep(1500); gem.ttsDelay = 0;
+    await freeOf(); gem.ttsDelay = 0;
     const qFree = await page.evaluate(() => !document.body.classList.contains("hold") && !document.querySelector(".loading"));
     await page.click('[data-act="nextq"]'); await sleep(200);
     const qNext = !!(await page.$(".arts .btn:not(.right):not(.wrong):not(.fade)"));
