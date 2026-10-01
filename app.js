@@ -126,15 +126,91 @@
   function pickVoice() { const v = speechSynthesis.getVoices(); deVoice = v.find(x => x.lang === "de-DE") || v.find(x => (x.lang || "").toLowerCase().startsWith("de")) || null; }
   if (hasTTS) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
   function plain(h) { const d = document.createElement("div"); d.innerHTML = h; return d.textContent.replace(/…/g, "").trim(); }
-  function speak(text) {
+  function speakLocal(text) {
     if (!hasTTS) return;
     try {
       speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(plain(text));
+      const u = new SpeechSynthesisUtterance(text);
       u.lang = "de-DE"; if (deVoice) u.voice = deVoice;
       u.rate = opt("slow", false) ? 0.7 : 0.95;
       speechSynthesis.speak(u);
     } catch (e) {}
+  }
+  /* Gemini-Stimme: jeder Text wird nur einmal erzeugt (nur der Text selbst geht an Gemini, ohne Anweisung)
+     und dann im Gerät gespeichert (IndexedDB, für beide Apps gemeinsam). Klappt es nicht, spricht die Stimme des Geräts. */
+  const player = typeof Audio === "function" ? new Audio() : null;
+  const SILENT = "data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQIAAAAAAA==";
+  const VOICE = C.voice || "Kore", MK = "kk-voice:model";
+  const gemVoice = () => !!gkey && opt("gvoice", true) && !!player && "indexedDB" in window;
+  let vdb = null;
+  const db = () => vdb || (vdb = new Promise((res, rej) => { const r = indexedDB.open("kk-voice", 1); r.onupgradeneeded = () => r.result.createObjectStore("a"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }));
+  const dbGet = k => db().then(d => new Promise(res => { const q = d.transaction("a").objectStore("a").get(k); q.onsuccess = () => res(q.result || null); q.onerror = () => res(null); })).catch(() => null);
+  const dbPut = (k, v) => db().then(d => new Promise(res => { const t = d.transaction("a", "readwrite"); t.objectStore("a").put(v, k); t.oncomplete = t.onerror = () => res(); })).catch(() => {});
+  async function ttsModel() {
+    let m = ""; try { m = localStorage.getItem(MK) || ""; } catch (e) {}
+    if (m) return m;
+    const names = [];
+    let page = "";
+    for (let i = 0; i < 5; i++) {
+      const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200" + (page ? "&pageToken=" + encodeURIComponent(page) : ""), { headers: { "x-goog-api-key": gkey } });
+      if (!r.ok) throw new Error(String(r.status));
+      const j = await r.json();
+      (j.models || []).forEach(x => { if (/tts/i.test(x.name) && (x.supportedGenerationMethods || []).includes("generateContent")) names.push(x.name.replace(/^models\//, "")); });
+      if (!(page = j.nextPageToken)) break;
+    }
+    // die günstigsten zuerst: lite, dann flash, pro zuletzt
+    const rank = n => (/lite/.test(n) ? 0 : /flash/.test(n) ? 1 : /pro/.test(n) ? 3 : 2);
+    names.sort((a, b) => rank(a) - rank(b));
+    if (!names.length) throw new Error("notts");
+    try { localStorage.setItem(MK, names[0]); } catch (e) {}
+    return names[0];
+  }
+  function wav(pcm, rate) {
+    const h = new DataView(new ArrayBuffer(44)), w = (o, s) => [...s].forEach((c, i) => h.setUint8(o + i, c.charCodeAt(0)));
+    w(0, "RIFF"); h.setUint32(4, 36 + pcm.length, true); w(8, "WAVE"); w(12, "fmt "); h.setUint32(16, 16, true); h.setUint16(20, 1, true); h.setUint16(22, 1, true);
+    h.setUint32(24, rate, true); h.setUint32(28, rate * 2, true); h.setUint16(32, 2, true); h.setUint16(34, 16, true); w(36, "data"); h.setUint32(40, pcm.length, true);
+    return new Blob([h.buffer, pcm], { type: "audio/wav" });
+  }
+  async function genAudio(text) {
+    const m = await ttsModel();
+    const ask = voice => fetch("https://generativelanguage.googleapis.com/v1beta/models/" + m + ":generateContent", {
+      method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": gkey },
+      body: JSON.stringify({ contents: [{ parts: [{ text }] }], generationConfig: Object.assign({ responseModalities: ["AUDIO"] }, voice ? { speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } } : {}) })
+    });
+    let r = await ask(VOICE);
+    if (r.status === 400) r = await ask("");
+    if (r.status === 404) { try { localStorage.removeItem(MK); } catch (e) {} }
+    if (!r.ok) throw new Error(String(r.status));
+    const j = await r.json(), parts = ((((j.candidates || [])[0] || {}).content || {}).parts || []);
+    const d = (parts.find(p => p.inlineData) || {}).inlineData;
+    if (!d || !d.data) throw new Error("noaudio");
+    const bytes = Uint8Array.from(atob(d.data), c => c.charCodeAt(0)), mime = d.mimeType || "";
+    return /pcm|l16/i.test(mime) ? wav(bytes, Number((mime.match(/rate=(\d+)/) || [0, 24000])[1])) : new Blob([bytes], { type: mime || "audio/wav" });
+  }
+  const making = new Map();
+  let turn = 0, lastUrl = "";
+  function speakGem(text) {
+    const my = ++turn, key = VOICE + "|" + text;
+    try { if (hasTTS) speechSynthesis.cancel(); } catch (e) {}
+    // iOS erlaubt Ton nur direkt beim Tippen: den Player jetzt mit Stille starten, den echten Ton gleich danach
+    player.pause(); player.src = SILENT; player.play().catch(() => {});
+    (async () => {
+      let blob = await dbGet(key);
+      if (!blob) {
+        if (!making.has(key)) making.set(key, genAudio(text).then(b => { dbPut(key, b); return b; }).finally(() => making.delete(key)));
+        blob = await making.get(key);
+      }
+      if (my !== turn) return;
+      if (lastUrl) URL.revokeObjectURL(lastUrl);
+      player.src = lastUrl = URL.createObjectURL(blob);
+      player.playbackRate = opt("slow", false) ? 0.75 : 1;
+      await player.play();
+    })().catch(() => { if (my === turn) speakLocal(text); });
+  }
+  function speak(text) {
+    const t = plain(text);
+    if (!t) return;
+    if (gemVoice()) speakGem(t); else speakLocal(t);
   }
   const fullWord = c => (ART[c.g] ? ART[c.g] + " " : "") + c.w;
 
@@ -804,6 +880,7 @@
       ${PH ? `<label class="fld inline">${T("newPhrases")} <input id="nppd" type="number" min="0" max="20" value="${opt("newPhrases", PH.perDay || 3)}"></label>` : ""}
       <label class="chk"><input id="pda" type="checkbox" ${opt("prodAuto", true) ? "checked" : ""}> ${T("prodAuto")}</label>
       <label class="chk"><input id="arf" type="checkbox" ${opt("arFirst", false) ? "checked" : ""}> ${T("arFirst")}</label>
+      <label class="chk"><input id="gvo" type="checkbox" ${opt("gvoice", true) ? "checked" : ""}> ${T("gvoice")}</label>
       <label class="chk"><input id="slw" type="checkbox" ${opt("slow", false) ? "checked" : ""}> ${T("slow")}</label>
       <h2>${T("resetH")}</h2>
       <button class="btn again" data-act="reset">${T("reset")}</button>
@@ -869,6 +946,7 @@
     else if (e.target.id === "npd") { setOpt("newPerDay", Math.max(0, Math.min(50, parseInt(e.target.value, 10) || 0))); if (!cur) { buildQueue(); cur = queue.shift() || null; } }
     else if (e.target.id === "arf") setOpt("arFirst", e.target.checked);
     else if (e.target.id === "slw") setOpt("slow", e.target.checked);
+    else if (e.target.id === "gvo") setOpt("gvoice", e.target.checked);
     else if (e.target.id === "pda") setOpt("prodAuto", e.target.checked);
     else if (e.target.id === "nppd") { setOpt("newPhrases", Math.max(0, Math.min(20, parseInt(e.target.value, 10) || 0))); if (!cur) { buildQueue(); cur = queue.shift() || null; } }
   });

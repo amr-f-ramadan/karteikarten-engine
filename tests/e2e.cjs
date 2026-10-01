@@ -89,10 +89,20 @@ const PH_STARTER = [
 
 // ---------- Gemini mock ----------
 function makeGemini() {
-  const g = { calls: [], mode: "ok", card: null };
+  const g = { calls: [], tts: [], lists: 0, mode: "ok", card: null };
   g.handle = async route => {
     const req = route.request();
-    g.calls.push({ url: req.url(), body: JSON.parse(req.postData()) });
+    // Voice: model list and text-to-speech requests are logged apart from the card/practice calls
+    if (req.method() === "GET") { g.lists++; return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ models: [
+      { name: "models/gemini-9-pro-tts", supportedGenerationMethods: ["generateContent"] }, { name: "models/gemini-9-flash-lite-tts", supportedGenerationMethods: ["generateContent"] },
+      { name: "models/gemini-9-flash", supportedGenerationMethods: ["generateContent"] }] }) }); }
+    const body = JSON.parse(req.postData());
+    if (body.generationConfig && body.generationConfig.responseModalities) {
+      g.tts.push({ url: req.url(), body });
+      if (g.mode === "busy" || g.ttsMode === "busy") return route.fulfill({ status: 503, contentType: "application/json", body: "{}" });
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ candidates: [{ content: { parts: [{ inlineData: { mimeType: "audio/L16;codec=pcm;rate=24000", data: Buffer.alloc(4800).toString("base64") } }] } }] }) });
+    }
+    g.calls.push({ url: req.url(), body });
     if (g.mode === "busy") return route.fulfill({ status: 503, contentType: "application/json", body: "{}" });
     const out = typeof g.card === "function" ? g.card(g.calls[g.calls.length - 1].body) : g.card;
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(out) }] } }] }) });
@@ -483,6 +493,42 @@ const toastOf = async (page, action) => {
     await page.screenshot({ path: SHOTS + "/dark-3-list.png" });
     await tab(page, "settings"); await page.screenshot({ path: SHOTS + "/dark-4-settings.png" });
     check("Eman dark: no page errors", !page.errors.length, page.errors);
+    await ctx.close();
+  }
+
+  // ===================== Voice: Gemini speech, made once per text and kept on the device =====================
+  {
+    const gem = makeGemini();
+    const { ctx, page } = await newPage(browser, { storage: { "kk-amr-v2:gemini": "fake-key" } });
+    await ctx.route("https://generativelanguage.googleapis.com/**", gem.handle);
+    await ctx.addInitScript(() => {
+      window.__played = []; window.__said = [];
+      HTMLMediaElement.prototype.play = function () { if (!this.src.startsWith("data:")) window.__played.push({ src: this.src, rate: this.playbackRate }); return Promise.resolve(); };
+      speechSynthesis.speak = u => window.__said.push(u.text);
+    });
+    await page.goto(`${ORIGIN}/de-karteikarten/`); await sleep(1200);
+    const word = (await page.textContent("#card .word")).replace(/\s+/g, " ").trim();
+    await page.click("#card .say"); await sleep(600);
+    const first = await page.evaluate(() => ({ played: window.__played.length, src: (window.__played[0] || {}).src || "", said: window.__said.length }));
+    const t1 = gem.tts[0];
+    check("Voice: first tap asks the cheapest TTS model with only the text", gem.lists === 1 && gem.tts.length === 1 && /gemini-9-flash-lite-tts:generateContent/.test(t1.url) && JSON.stringify(t1.body.contents) === JSON.stringify([{ parts: [{ text: word }] }]), { lists: gem.lists, n: gem.tts.length, url: t1 && t1.url, contents: t1 && t1.body.contents, word });
+    check("Voice: the Gemini audio is played, not the device voice", first.played === 1 && first.src.startsWith("blob:") && first.said === 0, first);
+    await page.click("#card .say"); await sleep(400);
+    await page.goto(`${ORIGIN}/de-karteikarten/`); await sleep(1200);
+    await page.click("#card .say"); await sleep(400);
+    const again = await page.evaluate(() => window.__played.length);
+    check("Voice: the same text again (also after reopening) comes from the device, no new Gemini call", gem.tts.length === 1 && gem.lists === 1 && again === 1, { tts: gem.tts.length, lists: gem.lists, again });
+    gem.ttsMode = "busy";
+    await page.click("#card"); await sleep(700);
+    await page.click('#card .say[data-say="ex"]'); await sleep(1500);
+    const fb = await page.evaluate(() => window.__said.slice());
+    check("Voice: if Gemini fails, the device voice speaks instead", fb.length === 1 && fb[0].length > 10, fb);
+    await tab(page, "settings"); await page.uncheck("#gvo"); await tab(page, "learn");
+    const before = gem.tts.length;
+    await page.click('#card .say[data-say="w"]'); await sleep(400);
+    const off = await page.evaluate(() => window.__said.length);
+    check("Voice: option off uses the device voice without asking Gemini", gem.tts.length === before && off === 2, { tts: gem.tts.length - before, off });
+    check("Voice: no page errors", !page.errors.length, page.errors);
     await ctx.close();
   }
 
