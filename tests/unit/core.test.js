@@ -1,7 +1,7 @@
 // Unit tests for the pure core modules (node --test tests/unit/). No browser, no network.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { slug, sameStem, topicOf, norm, pk, pkey, fullWord, fill } from "../../src/core/text.js";
+import { slug, sameStem, topicOf, norm, pk, pkey, fullWord, fill, today } from "../../src/core/text.js";
 import { INT, recordAnswer, freshCards, dueCards, newToday, allowMoreNew, boxOf } from "../../src/core/leitner.js";
 import { emptyP, merge, prune } from "../../src/core/progress.js";
 import { CardStore } from "../../src/core/store.js";
@@ -29,6 +29,14 @@ test("text helpers", () => {
   assert.equal(pkey("die Miete"), "miete");
   assert.equal(fullWord({ g: "pl", w: "Leute" }), "die Leute");
   assert.equal(fill("a {x} {y}", { x: 1 }), "a 1 {y}");
+});
+
+test("today: the day of the daily limit is the local date, not the UTC date", () => {
+  assert.equal(today("Europe/Berlin", new Date("2026-03-31T22:30:00Z")), "2026-04-01", "shortly after midnight in Berlin the UTC date is still yesterday");
+  assert.equal(today("Pacific/Pago_Pago", new Date("2026-04-01T09:00:00Z")), "2026-03-31", "west of UTC the local date is behind");
+  assert.equal(today("Europe/Berlin", new Date("2026-04-01T12:00:00Z")), "2026-04-01");
+  const d = new Date(), pad = n => String(n).padStart(2, "0");
+  assert.equal(today(), `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, "without a zone: the device's date");
 });
 
 test("leitner: answers move through the boxes, wrong answers reset", () => {

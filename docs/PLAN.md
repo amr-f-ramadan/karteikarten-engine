@@ -99,5 +99,6 @@ pruned after 30 days; voice cache capped at 150 MB; the new-card prompt lists on
 Not changed, on purpose: `writeLocal` stays synchronous (iOS can end a home-screen app at any moment; a debounce
 could lose the last answer); `cards.js` stays a JS file (format change would touch both app repos and their history).
 
-Noticed, not changed (separate decision): the app's "today" for daily limits is the UTC date (`toISOString`), the
-reminder tool uses the phone's time zone; between midnight and 02:00 local time the two can disagree by a day.
+Resolved afterwards: the app's "today" for daily limits was the UTC date (`toISOString`) while the reminder tool
+used the phone's time zone, so between midnight and 02:00 local time the two disagreed by a day. Now both use
+`core/text.today(tz)`: the device's local date in the app, the zone from `push.json` in the reminder.

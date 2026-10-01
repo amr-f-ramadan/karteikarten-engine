@@ -111,8 +111,8 @@ function makeGemini() {
   return g;
 }
 
-async function newPage(browser, { storage = {}, dark = false, standalone = false, reduced = false } = {}) {
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: dark ? "dark" : "light", reducedMotion: reduced ? "reduce" : "no-preference", locale: "ar-EG" });
+async function newPage(browser, { storage = {}, dark = false, standalone = false, reduced = false, tz = undefined } = {}) {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: dark ? "dark" : "light", reducedMotion: reduced ? "reduce" : "no-preference", locale: "ar-EG", timezoneId: tz });
   await ctx.addInitScript(([st, sa]) => {
     if (!sessionStorage.getItem("__seeded")) { for (const [k, v] of Object.entries(st)) localStorage.setItem(k, v); sessionStorage.setItem("__seeded", "1"); }
     if (sa) { const mm = window.matchMedia.bind(window); window.matchMedia = q => q.includes("display-mode: standalone") ? { matches: true, media: q, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} } : mm(q); }
@@ -473,15 +473,23 @@ const toastOf = async (page, action) => {
     await ctx.close();
   }
 
-  // A known card (box 2) is shown meaning first, to be said in German, with the 5 second bar
+  // A known card (box 2) is shown meaning first, to be said in German, with the 5 second bar.
+  // The phone is in UTC+14 at 20:00 UTC: for it the day is already the 2nd, so the daily limit of the 2nd is the one used up (n: 99)
   {
-    const prog = { v: 1, cards: { stabil: { b: 2, due: 1, t: 1, n: 2, w: 0 } }, art: {}, pending: {}, newDay: { d: new Date().toISOString().slice(0, 10), n: 99 }, opts: {}, updated: 1 };
-    const { ctx, page } = await newPage(browser, { storage: { "kk-eman-v2": JSON.stringify(prog) } });
+    const prog = { v: 1, cards: { stabil: { b: 2, due: 1, t: 1, n: 2, w: 0 } }, art: {}, pending: {}, newDay: { d: "2026-10-02", n: 99 }, opts: {}, updated: 1 };
+    const { ctx, page } = await newPage(browser, { storage: { "kk-eman-v2": JSON.stringify(prog) }, tz: "Pacific/Kiritimati" });
+    await page.clock.setFixedTime(new Date("2026-10-01T20:00:00Z"));
     await page.goto(`${ORIGIN}/eman-deutsch/`); await sleep(800);
     const front = await page.evaluate(() => ({ ar: (document.querySelector("#card .ar-big") || {}).textContent, timer: !!document.querySelector("#card .timer"), hint: (document.querySelector("#card .hint") || {}).textContent }));
     check("Eman: known card shows meaning first, asks for a German sentence, with timer", front.ar === "متين / ثابت" && front.timer && front.hint === "قوليها بالألماني في جملة كاملة", front);
     await grab(page, "learn-production");
     await page.screenshot({ path: SHOTS + "/light-10-production.png" });
+    // Only the due card is left (no new ones: today's limit is used up); "more new words" then writes today's date into the progress
+    await page.click("#card"); await sleep(450); await page.click('[data-act="yes"]'); await sleep(100);
+    const more = await page.$('[data-act="more"]');
+    if (more) { await more.click(); await sleep(100); }
+    const nd = JSON.parse(await page.evaluate(() => localStorage.getItem("kk-eman-v2"))).newDay;
+    check("Eman: the day of the daily limit is the phone's local date (the 2nd in UTC+14), not the UTC date", !!more && nd.d === "2026-10-02" && nd.n === 89, { done: !!more, nd });
     await ctx.close();
   }
 
