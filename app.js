@@ -723,6 +723,7 @@
   function flash(msg) { const el = $("#toast"); el.textContent = msg; el.hidden = false; clearTimeout(el._t); el._t = setTimeout(() => (el.hidden = true), 2600); }
   const gClass = c => "g-" + (c.g || "x");
   const speakBtn = (what, label) => `<button class="say" data-say="${what}" aria-label="${esc(label)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg></button>`;
+  const sayT = (text, label) => speakBtn("", label).replace('data-say=""', `data-t="${esc(plain(text))}"`);
   const wordHTML = c => `<span class="de word">${ART[c.g] ? `<span class="art">${ART[c.g]}</span> ` : ""}${esc(c.w)}</span>`;
 
   function famRow(c) {
@@ -742,8 +743,10 @@
     const front = arFirst
       ? `<p class="ar-big">${esc(c.ar)}</p><p class="hint">${T(always ? "whatDe" : isP(c) ? "sayPh" : "sayDe")}</p>${calm() ? "" : '<div class="timer"></div>'}`
       : `${wordHTML(c)}${c.hint ? `<p class="hint de">${esc(c.hint)}</p>` : ""}`;
+    // Rückseite: das Wort mit seinem Lautsprecher in einer Zeile (wie beim Beispielsatz)
     const back = `
-      ${arFirst ? wordHTML(c) + (c.hint ? `<p class="hint de">${esc(c.hint)}</p>` : "") : ""}
+      <div class="wordrow">${wordHTML(c)}${speakBtn("w", T("sayWord"))}</div>
+      ${arFirst && c.hint ? `<p class="hint de">${esc(c.hint)}</p>` : ""}
       <p class="ar" lang="ar" dir="rtl">${esc(c.ar)}</p>
       ${c.def ? `<p class="def de">${c.def}</p>` : ""}
       ${c.perf ? `<p class="perf de">${T("perfL")} <b>${esc(c.perf)}</b></p>` : ""}
@@ -756,7 +759,7 @@
       <div class="card ${gClass(c)}${isP(c) ? " ph" : ""} ${flipped ? "flipped" : ""}" id="card" data-act="flip" role="button" tabindex="0" aria-label="${T("flip")}">
         ${c.cat ? `<p class="cat">${esc(c.cat)}</p>` : ""}
         <div class="face">${flipped ? back : front}</div>
-        ${speakBtn("w", T("sayWord"))}
+        ${flipped ? "" : speakBtn("w", T("sayWord"))}
       </div>
       ${flipped
         ? `<div class="rate"><button class="btn again" data-act="no">${T("again")}</button><button class="btn ok" data-act="yes">${T("good")}</button></div>`
@@ -837,7 +840,7 @@
       const open = listOpen === c.id;
       groups.get(g).push(`<li class="${gClass(c)} ph" data-s="${esc(hay(c))}"><button class="row" data-act="open" data-id="${c.id}">
         <span class="de word">${esc(c.w)}</span>${dotsOf(c)}</button>
-        ${open ? `<div class="detail"><p class="ar" lang="ar" dir="rtl">${esc(c.ar)}</p><div class="exrow"><p class="ex de">${c.ex}</p><button class="say" data-t="${esc(plain(c.ex))}" aria-label="${esc(T("sayEx"))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg></button></div>${c.tr ? `<p class="tr" lang="ar" dir="rtl">${esc(c.tr)}</p>` : ""}${c.note ? `<p class="note">${c.note}</p>` : ""}<div class="row2"><button class="btn" data-act="sayt" data-t="${esc(c.w.replace(/…/g, ""))}">${T("phSay")}</button><button class="btn again" data-act="del" data-id="${c.id}">${T("delCard")}</button></div></div>` : ""}</li>`);
+        ${open ? `<div class="detail"><p class="ar" lang="ar" dir="rtl">${esc(c.ar)}</p><div class="exrow"><p class="ex de">${c.ex}</p>${sayT(c.ex, T("sayEx"))}</div>${c.tr ? `<p class="tr" lang="ar" dir="rtl">${esc(c.tr)}</p>` : ""}${c.note ? `<p class="note">${c.note}</p>` : ""}<div class="row2"><button class="btn" data-act="sayt" data-t="${esc(c.w.replace(/…/g, ""))}">${T("phSay")}</button><button class="btn again" data-act="del" data-id="${c.id}">${T("delCard")}</button></div></div>` : ""}</li>`);
     });
     const secs = [...groups.entries()].map(([t, rows]) => `<section class="topic"><h3><span>${esc(t)}</span><span class="tcount">${rows.length}</span></h3><ul class="list">${rows.join("")}</ul></section>`).join("");
     const learned = all.filter(c => P.cards[c.id] && P.cards[c.id].b >= 3).length;
@@ -855,7 +858,7 @@
       const open = listOpen === c.id;
       topics.get(famTopic).push(`<li class="${gClass(c)}${sub ? " sub" : ""}${inFam ? " infam" : ""}" data-s="${esc(hay(c))}"><button class="row" data-act="open" data-id="${c.id}">
         ${wordHTML(c)}<span class="lvl" aria-label="${T("level")} ${Math.max(b, 0)}">${dots}</span></button>
-        ${open ? `<div class="detail"><p class="ar" lang="ar" dir="rtl">${esc(c.ar)}</p>${c.perf ? `<p class="perf de">${T("perfL")} <b>${esc(c.perf)}</b></p>` : ""}<p class="ex de">${c.ex}</p>${c.tr ? `<p class="tr" lang="ar" dir="rtl">${esc(c.tr)}</p>` : ""}${famRow(c)}<button class="btn again" data-act="del" data-id="${c.id}">${T("delCard")}</button></div>` : ""}</li>`);
+        ${open ? `<div class="detail"><p class="ar" lang="ar" dir="rtl">${esc(c.ar)}</p>${c.perf ? `<p class="perf de">${T("perfL")} <b>${esc(c.perf)}</b></p>` : ""}<div class="exrow"><p class="ex de">${c.ex}</p>${sayT(c.ex, T("sayEx"))}</div>${c.tr ? `<p class="tr" lang="ar" dir="rtl">${esc(c.tr)}</p>` : ""}${famRow(c)}<div class="row2"><button class="btn" data-act="sayt" data-t="${esc(fullWord(c))}">${T("phSay")}</button><button class="btn again" data-act="del" data-id="${c.id}">${T("delCard")}</button></div></div>` : ""}</li>`);
     });
     const secs = [...topics.entries()].map(([t, rows]) => `<section class="topic"><h3><span>${esc(t)}</span><span class="tcount">${rows.length}</span></h3><ul class="list">${rows.join("")}</ul></section>`).join("");
     const words = WORDS(), learned = words.filter(c => P.cards[c.id] && P.cards[c.id].b >= 3).length;

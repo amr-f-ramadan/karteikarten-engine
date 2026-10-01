@@ -226,6 +226,8 @@ const toastOf = async (page, action) => {
     await page.click("#card"); await sleep(700);
     const back = await page.evaluate(() => ({ flipped: document.querySelector("#card").classList.contains("flipped"), tr: !!document.querySelector("#card .tr"), cat: (document.querySelector("#card .cat") || {}).textContent }));
     check("Eman: card flips and back shows Arabic example translation (tr)", back.flipped && back.tr, back);
+    const backSay = await page.evaluate(() => ({ row: !!document.querySelector('#card .wordrow .word + .say[data-say="w"]'), corner: document.querySelectorAll('#card > .say').length, ex: !!document.querySelector('#card .exrow .say[data-say="ex"]') }));
+    check("Eman: flipped card shows the word with its speaker in one row, no corner speaker", backSay.row && backSay.corner === 0 && backSay.ex, backSay);
     check("Eman: card shows its Arabic topic", back.cat && /[؀-ۿ]/.test(back.cat), back.cat);
     await grab(page, "learn-back");
     await page.screenshot({ path: SHOTS + "/light-2-learn-back.png" });
@@ -248,6 +250,8 @@ const toastOf = async (page, action) => {
     await page.click('[data-act="open"][data-id="ausblick"]');
     const chips = await page.$$eval(".detail .famchip", els => els.map(e => e.textContent.trim()));
     check("Eman: 'Ausblick' detail shows its family chips (Blick, Einblick)", JSON.stringify(chips) === JSON.stringify(["der Blick", "der Einblick"]), chips);
+    const listSay = await page.evaluate(() => ({ word: (document.querySelector('.detail .row2 [data-act="sayt"]') || {}).dataset, label: (document.querySelector('.detail .row2 [data-act="sayt"]') || {}).textContent, ex: !!document.querySelector(".detail .exrow .say[data-t]") }));
+    check("Eman: word list detail has a speaker for the example and an Arabic listen button for the word", listSay.word && listSay.word.t === "der Ausblick" && listSay.label === "اسمعيها" && listSay.ex, listSay);
     await grab(page, "list-detail");
     await page.screenshot({ path: SHOTS + "/light-4-list-detail.png" });
 
