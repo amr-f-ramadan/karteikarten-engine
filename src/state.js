@@ -7,7 +7,7 @@ export function createState(P) {
     mode: "learn",
     learn: { queue: [], cur: null, flipped: false, turning: false },
     quiz: null, asked: [], // die zuletzt gefragten Nomen (ids), damit das Quiz sie nicht gleich wieder zeigt
-    list: { open: null, kind: "w", query: "", closed: { w: null, p: null } },
+    list: { open: null, query: "", closed: { w: null, p: null } }, // Wörter- und Wendungsliste: offene Zeile, Suche, zugeklappte Themen je Art
     add: { word: "", busy: false, card: null, msg: "" },
     pad: { word: "", busy: false, card: null, msg: "" },
     pr: { words: [], task: "", starter: "", answer: "", fb: null, busy: false, msg: "" }

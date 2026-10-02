@@ -63,7 +63,8 @@ src/
   ui/
     dom.js       $, html helpers (speakBtn, wordHTML, chip, dots), flash, hold
     router.js    mode, render(), action registry (data-act → handler)
-    views/       learn.js, quiz.js, list.js, phrases.js, practice.js, settings.js
+    listing.js   what the word and phrase lists share (collapse threshold, closed topics, search filter, row actions)
+    views/       learn.js, quiz.js, list.js (words), phrases.js (own tab), practice.js, settings.js (four groups)
   main.js      bootstrap: config, state, wiring
 build.mjs      esbuild → app.js (iife); --check verifies app.js matches src
 tests/unit/    node --test for core/

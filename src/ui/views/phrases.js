@@ -1,12 +1,13 @@
-// Wendungen (Redemittel): eigene Liste nach Verwendungszweck, eigenes Eingabefeld, Grundstock von Gemini.
+// Wendungen (Redemittel): eigene Ansicht mit eigener Liste nach Verwendungszweck, eigenem Eingabefeld, Grundstock von Gemini.
 import { esc, pk, gClass } from "../../core/text.js";
 import { boxOf, learnedCount } from "../../core/leitner.js";
 import { goodPhrase } from "../../core/prompt.js";
 import { $, hold, SLOW_MS } from "../dom.js";
 import { dots, field, topicSection, searchBox, waitChips, exRow, arLine, trLine, noteBox } from "../parts.js";
 import { emptyAdd } from "../../state.js";
+import { COLLAPSE_AT, closedSet, listActions } from "../listing.js";
 
-export function createPhrasesPart(ctx, list) {
+export function createPhrasesView(ctx) {
   const { S, T, C, store, vocab, session, flash } = ctx, PH = C.phrases;
   const gemErr = e => (e.message === "key" ? T("keyBad") : null);
 
@@ -81,17 +82,20 @@ export function createPhrasesPart(ctx, list) {
         <span class="de word">${esc(c.w)}</span>${dots(boxOf(S.P, c), T)}</button>
         ${open ? `<div class="detail">${arLine(c.ar)}${exRow(c.ex, T("sayEx"))}${trLine(c.tr)}${noteBox(c.note)}<div class="row2"><button class="btn" data-act="sayt" data-t="${esc(c.w.replace(/…/g, ""))}">${T("phSay")}</button><button class="btn again" data-act="del" data-id="${c.id}">${T("delCard")}</button></div></div>` : ""}</li>`);
     });
-    const closed = all.length > list.COLLAPSE_AT ? list.closedSet("p", [...groups.keys()]) : null;
+    const closed = all.length > COLLAPSE_AT ? closedSet(S, "p", [...groups.keys()]) : null;
     const secs = [...groups.entries()].map(([t, rows]) => topicSection(t, rows, closed ? closed.has(t) : null)).join("");
     return `${renderAdd()}${all.length ? searchBox(S.list.query, T) + `<p class="meta">${T("phStat").replace("{a}", learnedCount(all, S.P)).replace("{t}", all.length)}</p>` : ""}${secs}<p id="nohits" class="meta dim" hidden>${T("noHits")}</p>`;
   }
+  const shared = listActions(ctx);
   return {
-    render, doPGen,
-    actions: {
+    mode: "phrases", render, enter: shared.enter, after: shared.after, input: shared.input,
+    actions: Object.assign({
       pgen: () => { const w = $("#np"); if (w && S.pad.card && !w.value.trim()) w.value = S.pad.word; doPGen(); },
       psave: doPSave,
       pdiscard: () => { S.pad = emptyAdd(); ctx.render(); },
-      pstart: doStarter
-    }
+      pstart: doStarter,
+      del: el => vocab.deleteCard(el.dataset.id)
+    }, shared.actions),
+    keys(e) { if (e.target.id === "np" && e.key === "Enter") { e.preventDefault(); doPGen(); } }
   };
 }
