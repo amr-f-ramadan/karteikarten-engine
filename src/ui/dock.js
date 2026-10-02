@@ -116,7 +116,8 @@ export function createDock(ctx, nav) {
     const cur = items[current()];
     items.forEach(b => b.setAttribute("aria-current", b === cur ? "page" : "false"));
     const bd = document.getElementById("badge"); if (bd) { bd.textContent = dueN; bd.hidden = !dueN; }
-    const kb = knob.querySelector(".kbadge"); kb.textContent = dueN; kb.hidden = !dueN;
+    // Die Zahl gehört zum Lernen-Knopf (dem mit #badge): der Knopf zeigt sie nur, solange er diese Ansicht zeigt
+    const kb = knob.querySelector(".kbadge"); kb.textContent = dueN; kb.hidden = !dueN || !cur.contains(bd);
     const svg = cur.querySelector("svg"); if (svg) knob.replaceChild(svg.cloneNode(true), knob.querySelector("svg"));
     const lbl = cur.querySelector(".lbl"); knob.setAttribute("aria-label", lbl ? lbl.textContent : cur.dataset.mode);
   }
