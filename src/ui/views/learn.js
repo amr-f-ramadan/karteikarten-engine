@@ -51,7 +51,7 @@ export function createLearnView(ctx) {
       more: () => { allowMoreNew(S.P, today(), ctx.opt("newPerDay", C.newPerDay || 10)); ctx.changed(); session.restart(); }
     },
     keys(e) {
-      if (!L.cur || /INPUT|TEXTAREA/.test(e.target.tagName)) return;
+      if (!L.cur || /INPUT|TEXTAREA|BUTTON/.test(e.target.tagName)) return; // ein Knopf mit Fokus bekommt Enter und Leertaste selbst
       if (e.key === " " || e.key === "Enter") { e.preventDefault(); session.flip(); }
       else if (L.flipped && (e.key === "1" || e.key === "ArrowLeft")) session.answer(false);
       else if (L.flipped && (e.key === "2" || e.key === "ArrowRight")) session.answer(true);

@@ -9,6 +9,7 @@ import { cardPrompt, cardSchema, phrasePrompt, starterPrompt } from "../../src/c
 import { diffHTML } from "../../src/core/diff.js";
 import { parseCards, serializeCards, appendCards } from "../../src/core/cardsfile.js";
 import { freeId, shapeCard } from "../../src/core/newcard.js";
+import { nearestTurn, settleTarget, glideDuration } from "../../src/core/dock.js";
 
 const DAY = 864e5, day = "2026-10-01";
 const cards = () => [
@@ -149,6 +150,16 @@ test("new card: id, fields, family and topic are shaped the same way for the app
   assert.deepEqual(Object.keys(o), ["id", "g", "w", "cat", "hint", "ar", "def", "ex", "note", "src", "fam"], "the app's field order in cards.js");
   const p = shapeCard({ w: "Haus", g: "das", ar: "بيت", ex: "x", fam: "wohnen", def: "D" }, { id: "haus", fields: ["w", "g", "hint", "ar", "ex"], newCat: "Neu", store: st });
   assert.deepEqual(p, { id: "haus", g: "das", w: "Haus", cat: "Neu", hint: "", ar: "بيت", ex: "x" }, "no def without the field, a family with another stem is dropped, topic falls back");
+});
+
+test("dock: a loop of five draws each item at its nearest turn, a lift settles on a slot", () => {
+  assert.deepEqual([0, 1, 2, 3, 4, -1, -3, 7].map(d => nearestTurn(d, 5)), [0, 1, 2, -2, -1, -1, 2, 2]);
+  assert.ok(Math.abs(nearestTurn(2.6, 5) + 2.4) < 1e-9);
+  assert.equal(settleTarget(1.4, 0, 1 / 72, 1), 1, "no speed: nearest slot");
+  assert.equal(settleTarget(1.4, -0.9, 1 / 72, 1), 3, "a flick to the left carries two slots further");
+  assert.equal(settleTarget(1.4, -0.9, 1 / 72, -1), -1, "mirrored for RTL");
+  assert.equal(settleTarget(1.4, -9, 1 / 72, 1), 3, "a flick carries two slots at most");
+  assert.equal(glideDuration(0), 200); assert.equal(glideDuration(2), 440); assert.equal(glideDuration(9), 520);
 });
 
 test("progress: done waitlist entries older than 30 days are pruned", () => {

@@ -135,7 +135,32 @@ async function newPage(browser, { storage = {}, dark = false, standalone = false
   page.on("dialog", d => { page.dialogs.push(d.message()); d.accept(); });
   return { ctx, page };
 }
-const tab = (page, mode) => page.click(`nav button[data-mode=${mode}]`);
+// The views sit in a pill behind the knob: open it, tap the view, wait until the pill has sunk again
+const navOpen = page => page.evaluate(() => document.querySelector("nav").classList.contains("open"));
+// A click that, when its selector never resolves, says whether the page's script thread is alive, whether the element exists
+// (asked over CDP, without script) and where the script is stuck, instead of only "waiting for locator"
+const clickOrDiagnose = async (page, sel) => {
+  try { await page.click(sel, { timeout: 8000 }); }
+  catch (e) {
+    const alive = await Promise.race([page.evaluate(() => "alive").catch(x => "evaluate: " + x.message), sleep(2000).then(() => "hung")]);
+    let dom = "?", stack = "";
+    try {
+      const cdp = await page.context().newCDPSession(page), doc = await cdp.send("DOM.getDocument", { depth: 0 });
+      dom = JSON.stringify(await cdp.send("DOM.querySelector", { nodeId: doc.root.nodeId, selector: sel }));
+      if (alive === "hung") {
+        await cdp.send("Debugger.enable"); const paused = new Promise(res => cdp.once("Debugger.paused", res)); await cdp.send("Debugger.pause");
+        const p = await Promise.race([paused, sleep(3000)]);
+        if (p) stack = p.callFrames.slice(0, 10).map(f => `${f.functionName || "(anon)"} ${f.url.split("/").pop()}:${f.location.lineNumber + 1}:${f.location.columnNumber + 1}`).join(" < ");
+      }
+    } catch (x) { dom = "cdp: " + x.message; }
+    throw new Error(`${e.message.split("\n")[0]} | script thread: ${alive} | element: ${dom} | stack: ${stack}`);
+  }
+};
+const tab = async (page, mode) => {
+  await page.click(".knob"); await page.waitForFunction(() => document.querySelector("nav").classList.contains("open"));
+  await page.click(`nav button[data-mode=${mode}]`);
+  await page.waitForFunction(() => !document.querySelector("nav").classList.contains("open"), null, { timeout: 3000 });
+};
 // Clears the toast, runs the action, then waits for the new toast it produces
 const toastOf = async (page, action) => {
   await page.evaluate(() => { const t = document.querySelector("#toast"); t.hidden = true; t.textContent = ""; });
@@ -228,6 +253,44 @@ const toastOf = async (page, action) => {
     const sw = await page.evaluate(async () => { const r = await navigator.serviceWorker.getRegistration(); return r ? r.scope : null; });
     check("Eman: service worker registered for /eman-deutsch/", sw === `${ORIGIN}/eman-deutsch/`, sw);
 
+    // Lens dock: one knob with the current view, a pill that rises, turns without end and sinks again
+    const knob = await page.evaluate(() => { const k = document.querySelector(".knob"), nav = document.querySelector("nav"); return { label: k && k.getAttribute("aria-label"), icon: !!(k && k.querySelector("svg path, svg rect")), badge: k && k.querySelector(".kbadge").textContent, navBadge: document.querySelector("#badge").textContent, open: nav.classList.contains("open"), describedBy: k && k.getAttribute("aria-describedby") === k.querySelector(".kbadge").id, untabbable: [...nav.querySelectorAll("button")].every(b => b.tabIndex === -1) }; });
+    // (the settings tab is open at this point; a swipe to the right in RTL moves on to the next view, which wraps round to learn)
+    check("Eman: the knob shows the current view (Arabic label, icon, due count), pill closed", knob.label === "الإعدادات" && knob.icon && knob.badge === knob.navBadge && !knob.open, knob);
+    check("Eman: the knob's count is announced with it, the hidden pill's buttons are out of the Tab order", knob.describedBy && knob.untabbable, knob);
+    const openDock = async () => { await page.click(".knob"); await page.waitForFunction(() => document.querySelector("nav").classList.contains("open")); await sleep(450); }; // let the pill finish rising
+    await openDock();
+    const bb = await (await page.$("nav")).boundingBox(), midX = bb.x + bb.width / 2, midY = bb.y + bb.height / 2;
+    await page.mouse.move(midX, midY); await page.mouse.down();
+    for (let i = 1; i <= 9; i++) { await page.mouse.move(midX + i * 8, midY); await sleep(40); }
+    await sleep(120); await page.mouse.up(); await sleep(40);
+    const early = await page.evaluate(() => document.querySelector("nav button[aria-current=page]").dataset.mode); // the row is still gliding: no switch yet
+    await page.waitForFunction(() => !document.querySelector("nav").classList.contains("open"), null, { timeout: 3000 });
+    const swiped = await page.evaluate(() => ({ early: null, mode: document.querySelector("nav button[aria-current=page]").dataset.mode, card: !!document.querySelector("#card"), knob: document.querySelector(".knob").getAttribute("aria-label") }));
+    swiped.early = early;
+    check("Eman: a swipe to the right (RTL) settles on the next view round the loop, then switches to it and the pill sinks", early === "settings" && swiped.mode === "learn" && swiped.card && swiped.knob === "مذاكرة", swiped);
+    await openDock();
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange"))); await sleep(700); // a sync and its render while the pill is open
+    check("Eman: a render while the pill is open leaves it open", await navOpen(page));
+    await sleep(3600);
+    check("Eman: an untouched pill sinks by itself", !(await navOpen(page)));
+    await openDock();
+    await page.mouse.move(midX, midY); await page.mouse.down(); await page.mouse.move(midX + 30, midY);
+    await page.evaluate(() => document.querySelector("nav").dispatchEvent(new PointerEvent("pointercancel", { bubbles: true })));
+    await page.mouse.up(); await sleep(1000);
+    const cancelled = await page.evaluate(() => ({ open: document.querySelector("nav").classList.contains("open"), mode: document.querySelector("nav button[aria-current=page]").dataset.mode }));
+    check("Eman: a cancelled touch still settles on an icon and the pill sinks", !cancelled.open && cancelled.mode === "learn", cancelled);
+    // Keyboard: Enter on the knob opens the pill with focus on the current view, arrows turn it, Enter picks, focus returns to the knob
+    await page.focus(".knob"); await page.keyboard.press("Enter"); await page.waitForFunction(() => document.querySelector("nav").classList.contains("open")); await sleep(450);
+    const focused = await page.evaluate(() => document.activeElement.dataset.mode);
+    await page.keyboard.press("ArrowLeft"); await sleep(300); await page.keyboard.press("ArrowLeft"); await sleep(300);
+    const centred = await page.evaluate(() => document.querySelector("nav button.on").dataset.mode);
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => !document.querySelector("nav").classList.contains("open"), null, { timeout: 3000 });
+    const entered = await page.evaluate(() => [document.querySelector("nav button[aria-current=page]").dataset.mode, document.activeElement.className]);
+    check("Eman: keyboard: Enter on the knob opens the pill on the current view, arrows turn it (RTL), Enter picks, focus returns to the knob", focused === "learn" && centred === "list" && entered[0] === "list" && entered[1] === "knob", { focused, centred, entered });
+    await tab(page, "learn");
+
     // Learn: front, flip animation, back with tr + family chips + topic
     await tab(page, "learn");
     await grab(page, "learn-front");
@@ -248,6 +311,8 @@ const toastOf = async (page, action) => {
       await page.click('[data-act="yes"]'); await sleep(80);
     }
     check("Eman: finishing the day shows done screen", !!(await page.$(".done")));
+    const badges = await page.evaluate(() => [document.querySelector("#badge").hidden, document.querySelector(".knob .kbadge").hidden]);
+    check("Eman: the knob's count follows the nav badge (both hidden when nothing is left)", badges[0] === true && badges[1] === true, badges);
     await grab(page, "learn-done");
 
     // Family chips on a card back: show the list detail of "ausblick" instead (deterministic)
@@ -588,11 +653,11 @@ const toastOf = async (page, action) => {
     await page.click('.arts [data-g="der"]'); await page.waitForSelector(".arts .right", { timeout: 5000 }); await sleep(300);
     const qHold = await page.evaluate(() => ({ hold: document.body.classList.contains("hold"), ring: !!document.querySelector(".card.quiz .say.loading"), dim: getComputedStyle(document.querySelector('[data-act="nextq"]')).opacity }));
     await page.screenshot({ path: SHOTS + "/voice-quiz-hold.png", clip: { x: 0, y: 60, width: 390, height: 560 } });
-    await page.click('[data-act="nextq"]'); await sleep(100);
+    await clickOrDiagnose(page, '[data-act="nextq"]'); await sleep(100);
     const qSame = (await page.textContent(".card.quiz .word")).includes(qWord.replace("___", "").trim());
     await freeOf(); gem.ttsDelay = 0;
     const qFree = await page.evaluate(() => !document.body.classList.contains("hold") && !document.querySelector(".loading"));
-    await page.click('[data-act="nextq"]'); await sleep(200);
+    await clickOrDiagnose(page, '[data-act="nextq"]'); await sleep(200);
     const qNext = !!(await page.$(".arts .btn:not(.right):not(.wrong):not(.fade)"));
     check("Voice: quiz shows the ring and blocks 'next' until the word's voice is ready", qHold.hold && qHold.ring && Number(qHold.dim) < 0.6 && qSame && qFree && qNext, { qHold, qSame, qFree, qNext });
     await tab(page, "learn");
