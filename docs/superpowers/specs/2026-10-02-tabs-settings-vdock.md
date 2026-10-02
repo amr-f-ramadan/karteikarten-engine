@@ -41,9 +41,12 @@ Browsers without animatable `clip-path` still get the fade and slide.
 - Option `dockV` (progress `opts`, synced like the other options; checkbox `#dkv`). The dock reads it on every
   `refresh` and toggles `body.dock-v`.
 - Vertical: the knob rests in the same bottom right corner; a tap drives it up to the middle of the right edge
-  (`--ky`), the pill grows up and down out of it (80 px wide, up to 380 px high, centred on the knob), the views
-  are stacked, a vertical swipe turns them, ArrowUp/ArrowDown work on the keyboard, the centred icon shifts 9 px
-  inwards instead of up and keeps its label below. On closing the pill falls into the knob and the knob drives back
+  (animated `bottom`, not `vh`: in Safari with its toolbar 100vh and the window differ, 50 % does not), the pill grows
+  up and down out of it (88 px wide, lens 80 px, up to 380 px high, centred on the knob), the views are stacked, a
+  vertical swipe turns them, ArrowUp/ArrowDown work on the keyboard, the centred icon is lifted 9 px with its label
+  below, as in the horizontal pill.
+- Labels always fit inside the lens: the dock measures each label (again once the fonts are loaded) and sets a smaller
+  font size for a name that would exceed the lens minus 8 px at the centred button's 1.25× ("Einstellungen"). On closing the pill falls into the knob and the knob drives back
   down to the corner. No RTL mirroring on the vertical axis.
 - Horizontal stays exactly as it is.
 

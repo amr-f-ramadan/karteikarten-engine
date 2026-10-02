@@ -5,8 +5,9 @@
 import { nearestTurn, settleTarget, glideDuration } from "../core/dock.js";
 import { calm } from "./dom.js";
 
-// MOVE_MS: der Weg des Knopfs zwischen Ecke und Mitte, RISE_MS: das Wachsen, SINK_MS: das Fallen der Pille (alle wie in app.css)
-const SLOT = 76, TAP_PX = 6, IDLE_MS = 3500, MOVE_MS = 600, RISE_MS = 700, SINK_MS = 700;
+// MOVE_MS: der Weg des Knopfs zwischen Ecke und Mitte, RISE_MS: das Wachsen, SINK_MS: das Fallen der Pille; LENS: die Breite
+// der Linse waagerecht und senkrecht (alle wie in app.css); der mittlere Knopf ist 1,25-fach
+const SLOT = 76, TAP_PX = 6, IDLE_MS = 3500, MOVE_MS = 600, RISE_MS = 700, SINK_MS = 700, LENS = 88, LENS_V = 80, MID_SCALE = 1.25;
 
 export function createDock(ctx, nav) {
   const { S } = ctx;
@@ -17,6 +18,18 @@ export function createDock(ctx, nav) {
     if (n.nodeType !== 3 || !n.textContent.trim()) return;
     const s = document.createElement("span"); s.className = "lbl"; s.textContent = n.textContent.trim(); b.replaceChild(s, n);
   }));
+  /* Der Name muss in die Linse passen, auch 1,25-fach in der Mitte: längere Namen werden kleiner gesetzt. Gemessen am Text selbst
+     (Range), bereinigt um die gerade gesetzte Vergrößerung des Knopfs, und noch einmal, sobald die Schriften geladen sind */
+  function fitLabels() {
+    const budget = ((isV() ? LENS_V : LENS) - 8) / MID_SCALE;
+    items.forEach(b => {
+      const l = b.querySelector(".lbl"); if (!l) return;
+      l.style.fontSize = "";
+      const r = document.createRange(); r.selectNodeContents(l);
+      const scale = b.getBoundingClientRect().width / (b.offsetWidth || 1) || 1, w = r.getBoundingClientRect().width / scale;
+      if (w > budget) l.style.fontSize = Math.max(0.55, budget / w).toFixed(2) + "em";
+    });
+  }
   const knob = document.createElement("button");
   knob.className = "knob"; knob.setAttribute("aria-expanded", "false");
   knob.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"></svg><span class="kbadge" id="kbadge" hidden></span>';
@@ -36,13 +49,14 @@ export function createDock(ctx, nav) {
   let active = false, startX = 0, startPos = 0, moved = false, lastX = 0, lastT = 0, vel = 0, lastRelease = 0;
 
   /* Symbol, Größe und Text folgen dem Abstand zur Mitte, damit beim Gleiten nichts springt: der mittlere Knopf hebt sein
-     Symbol an (senkrecht: rückt es nach innen) und zeigt seinen Text, die anderen sitzen in der Mitte der Pille */
+     Symbol an (auch senkrecht: so sitzen Symbol und Text zusammen in der Linse) und zeigt seinen Text, die anderen sitzen in
+     der Mitte der Pille */
   function place() {
     const on = mod(Math.round(pos)), v = isV();
     items.forEach((b, i) => {
       const d = nearestTurn(i - pos, N), near = Math.max(0, 1 - Math.abs(d)), s = Math.max(0.8, 1.25 - Math.abs(d) * 0.35);
-      const along = (d * SLOT * dir()).toFixed(1), lift = (-9 * near).toFixed(1);
-      b.style.transform = `translate(${v ? lift : along}px, ${v ? along : lift}px) scale(${s.toFixed(3)})`;
+      const along = d * SLOT * dir(), lift = -9 * near;
+      b.style.transform = `translate(${(v ? 0 : along).toFixed(1)}px, ${(v ? along + lift : lift).toFixed(1)}px) scale(${s.toFixed(3)})`;
       b.style.opacity = Math.abs(d) > 2.6 ? 0 : 1;
       const lbl = b.querySelector(".lbl"); if (lbl) lbl.style.opacity = Math.max(0, 2 * near - 1).toFixed(2);
       b.classList.toggle("on", i === on);
@@ -141,7 +155,7 @@ export function createDock(ctx, nav) {
   /* Nach jedem Zeichnen: aktive Ansicht markieren, Zahl in Leiste und Knopf, Symbol und Name der Ansicht auf dem Knopf */
   function refresh(dueN) {
     // Die Ausrichtung ist eine Option (Aussehen): die Klasse am body schaltet CSS und Achse um
-    const v = !!ctx.opt("dockV", false); if (v !== isV()) { document.body.classList.toggle("dock-v", v); place(); }
+    const v = !!ctx.opt("dockV", false); if (v !== isV()) { document.body.classList.toggle("dock-v", v); fitLabels(); place(); }
     const cur = items[current()];
     items.forEach(b => b.setAttribute("aria-current", b === cur ? "page" : "false"));
     const bd = document.getElementById("badge"); if (bd) { bd.textContent = dueN; bd.hidden = !dueN; }
@@ -150,6 +164,7 @@ export function createDock(ctx, nav) {
     const svg = cur.querySelector("svg"); if (svg) knob.replaceChild(svg.cloneNode(true), knob.querySelector("svg"));
     const lbl = cur.querySelector(".lbl"); knob.setAttribute("aria-label", lbl ? lbl.textContent : cur.dataset.mode);
   }
-  place();
+  fitLabels(); place();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitLabels);
   return { refresh };
 }

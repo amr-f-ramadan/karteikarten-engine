@@ -144,16 +144,15 @@ nav button:focus-visible{outline:3px solid var(--accent);outline-offset:-3px;bor
 .knob:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 /* Offen ist der Knopf sofort weg (die Pille steht an seiner Stelle); beim Schließen blendet er unter der fallenden Pille wieder ein */
 body.dock-open .knob{opacity:0;pointer-events:none;transition:opacity 0s}
-/* Senkrechtes Dock (Option dockV): der Knopf fährt aus der Ecke hoch zur Mitte des rechten Rands (--ky), die Pille wächst dort
-   nach oben und unten, die Knöpfe stehen übereinander (das Dock setzt die Achse), die Linse liegt quer */
-body.dock-v .knob{left:auto;right:18px;margin-left:0;bottom:calc(50% - 29px);--ky:calc(50vh - 29px - max(22px,calc(env(safe-area-inset-bottom,0px) + 10px)));transform:translateY(var(--ky))}
-body.dock-v .knob.mid{transform:none}
+/* Senkrechtes Dock (Option dockV): der Knopf fährt aus der Ecke hoch zur Mitte des rechten Rands, die Pille (88 px breit, Linse
+   80 px) wächst dort nach oben und unten, die Knöpfe stehen übereinander (das Dock setzt die Achse), die Linse liegt quer.
+   Der Weg des Knopfs ist hier bottom, nicht vh: in Safari mit Leiste stimmt 100vh nicht mit dem Fenster überein, 50 % schon */
+body.dock-v .knob{left:auto;right:18px;margin-left:0;transform:none;transition:bottom .6s cubic-bezier(.22,1,.36,1),opacity .4s}
+body.dock-v .knob.mid{bottom:calc(50% - 29px)}
 body.dock-v nav{left:auto;right:18px;margin:0;bottom:calc(50% - 29px);transition:width .7s cubic-bezier(.22,1,.36,1),height .7s cubic-bezier(.22,1,.36,1),bottom .7s cubic-bezier(.22,1,.36,1),right .7s cubic-bezier(.22,1,.36,1),opacity .25s .45s}
-body.dock-v nav.open{width:80px;height:min(94vh,380px);right:7px;bottom:calc(50% - min(47vh,190px));transition:width .7s cubic-bezier(.22,1,.36,1),height .7s cubic-bezier(.22,1,.36,1),bottom .7s cubic-bezier(.22,1,.36,1),right .7s cubic-bezier(.22,1,.36,1),opacity 0s}
+body.dock-v nav.open{width:88px;height:min(94vh,380px);right:3px;bottom:calc(50% - min(47vh,190px));transition:width .7s cubic-bezier(.22,1,.36,1),height .7s cubic-bezier(.22,1,.36,1),bottom .7s cubic-bezier(.22,1,.36,1),right .7s cubic-bezier(.22,1,.36,1),opacity 0s}
 body.dock-v nav::before{top:50%;bottom:auto;left:4px;right:4px;width:auto;height:88px;margin:-44px 0 0}
 body.dock-v nav button{top:50%;left:0;width:100%;height:76px;margin:-38px 0 0}
-/* In der schmalen Pille sitzt die Zahl über dem Symbol statt auf seiner Schulter, sonst schneidet der Rand sie ab */
-body.dock-v #badge,body.dock-v .knob .kbadge{top:calc(50% - 30px);inset-inline-start:calc(50% + 2px)}
 @media (prefers-reduced-motion:reduce){nav,.knob,nav.rising button,nav.rising .lbl,nav:not(.open) .lbl{transition:none}}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + max(10px,calc(env(safe-area-inset-bottom,0px) - 14px)));color:var(--ink);padding:11px 16px;border-radius:16px;font-size:.9rem;z-index:6;max-width:90%}
 @media (prefers-reduced-motion:reduce){.btn{transition:none}}
