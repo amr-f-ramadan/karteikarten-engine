@@ -211,13 +211,18 @@ const toastOf = async (page, action) => {
     const put = gh.log.find(e => e.method === "PUT" && e.path.endsWith("/cards.js"));
     const saved = put && unb64(put.body.content);
     const run = { request: gem.calls[0] && gem.calls[0].body, formIds, selLabels, savedLine: saved && saved.slice(amrCards.lastIndexOf("\n];")), savedPrefixOk: !!saved && saved.startsWith(amrCards.slice(0, amrCards.lastIndexOf("\n];"))) };
+    // The longest label ("Einstellungen") must fit inside the 88 px lens while its button is centred and enlarged
+    await tab(page, "settings"); await page.click(".knob"); await page.waitForFunction(() => document.querySelector("nav").classList.contains("open")); await sleep(900);
+    const label = await page.evaluate(() => { const l = document.querySelector("nav button.on .lbl"), r = document.createRange(); r.selectNodeContents(l); return { text: l.textContent, width: Math.round(r.getBoundingClientRect().width), size: getComputedStyle(l).fontSize }; });
+    await page.keyboard.press("Escape");
     const errors = page.errors; await ctx.close();
-    return { run, errors };
+    return { run, errors, label };
   };
   const hash = run => require("crypto").createHash("sha256").update(JSON.stringify(run)).digest("hex");
   if (CAPTURE) { const { run } = await runAmr("amr-capture"); fs.writeFileSync(FIX + "/amr-expected.sha256", hash(run) + "\n"); console.log("captured tests/fixtures/amr-expected.sha256"); }
   const want = fs.readFileSync(FIX + "/amr-expected.sha256", "utf8").trim();
-  const { run: got, errors: amrErrors } = await runAmr("de-karteikarten");
+  const { run: got, errors: amrErrors, label: amrLabel } = await runAmr("de-karteikarten");
+  check("Amr: the centred label 'Einstellungen' fits inside the lens", amrLabel.text === "Einstellungen" && amrLabel.width <= 84, amrLabel);
   if (process.env.DUMP_RUN) fs.writeFileSync(process.env.DUMP_RUN, JSON.stringify(got, null, 1));
   check("Amr: Gemini request, add form, article labels and saved card exactly as with his original engine", hash(got) === want, { formIds: got.formIds, savedLine: got.savedLine, promptStart: got.request && got.request.contents[0].parts[0].text.slice(0, 200) });
   check("Amr: no page errors", !amrErrors.length, amrErrors);
@@ -338,7 +343,7 @@ const toastOf = async (page, action) => {
     const vCorner = { ...(await knobXY()), vertical: await page.evaluate(() => document.body.classList.contains("dock-v")) };
     await page.click(".knob"); await page.waitForFunction(() => document.querySelector("nav").classList.contains("open"), null, { timeout: 3000 });
     const vMid = await knobXY(); await sleep(900);
-    const vPill = await page.evaluate(() => { const r = document.querySelector("nav").getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height), cy: Math.round(r.top + r.height / 2), right: Math.round(innerWidth - r.right), stacked: [...document.querySelectorAll("nav button")].every(b => /translate\(-?[\d.]+px, -?[\d.]+px\)/.test(b.style.transform)) }; });
+    const vPill = await page.evaluate(() => { const r = document.querySelector("nav").getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height), cy: Math.round(r.top + r.height / 2), right: Math.round(innerWidth - r.right), stacked: [...document.querySelectorAll("nav button")].every(b => /translate\(-?[\d.]+px, -?[\d.]+px\)/.test(b.style.transform)), lblFit: [...document.querySelectorAll("nav button")].every(b => { const l = b.querySelector(".lbl"), rg = document.createRange(); rg.selectNodeContents(l); return rg.getBoundingClientRect().width / (b.getBoundingClientRect().width / b.offsetWidth) * 1.25 <= 74; }) }; });
     const vb = await (await page.$("nav")).boundingBox(), vx = vb.x + vb.width / 2, vy = vb.y + vb.height / 2;
     await page.mouse.move(vx, vy); await page.mouse.down();
     for (let i = 1; i <= 9; i++) { await page.mouse.move(vx, vy + i * 8); await sleep(40); }
@@ -347,7 +352,7 @@ const toastOf = async (page, action) => {
     const vMode = await page.evaluate(() => document.querySelector("nav button[aria-current=page]").dataset.mode);
     await page.waitForFunction(() => !document.querySelector("nav").classList.contains("open"), null, { timeout: 7000 });
     await sleep(1500); const vBack = await knobXY();
-    check("Eman: vertical dock: the knob rests in the corner, drives to the middle of the right edge, the pill grows up and down round it, a swipe down turns to the previous view, the knob comes back down", vCorner.vertical && vCorner.right <= 24 && vCorner.bottomGap <= 30 && vMid.right <= 24 && Math.abs(vMid.cy - 422) <= 3 && vPill.h > 300 && vPill.w <= 90 && Math.abs(vPill.cy - 422) <= 3 && vPill.right <= 20 && vMode === "practice" && vBack.right === vCorner.right && vBack.cy === vCorner.cy, { vCorner, vMid, vPill, vMode, vBack });
+    check("Eman: vertical dock: the knob rests in the corner, drives to the middle of the right edge, the pill grows up and down round it, a swipe down turns to the previous view, the knob comes back down", vCorner.vertical && vCorner.right <= 24 && vCorner.bottomGap <= 30 && vMid.right <= 24 && Math.abs(vMid.cy - 422) <= 3 && vPill.h > 300 && vPill.w <= 90 && Math.abs(vPill.cy - 422) <= 3 && vPill.right <= 20 && vPill.lblFit && vMode === "practice" && vBack.right === vCorner.right && vBack.cy === vCorner.cy, { vCorner, vMid, vPill, vMode, vBack });
     await tab(page, "settings"); await page.uncheck("#dkv"); await sleep(100);
     await tab(page, "learn");
 
