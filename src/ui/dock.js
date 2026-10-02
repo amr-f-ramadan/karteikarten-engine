@@ -4,8 +4,8 @@
 import { nearestTurn, settleTarget, glideDuration } from "../core/dock.js";
 import { calm } from "./dom.js";
 
-// MOVE_MS: der Weg des Knopfs zwischen Ecke und Mitte, SINK_MS: das Sinken der Pille (beide wie in app.css)
-const SLOT = 76, TAP_PX = 6, IDLE_MS = 3500, MOVE_MS = 600, SINK_MS = 700;
+// MOVE_MS: der Weg des Knopfs zwischen Ecke und Mitte, RISE_MS: das Wachsen, SINK_MS: das Fallen der Pille (alle wie in app.css)
+const SLOT = 76, TAP_PX = 6, IDLE_MS = 3500, MOVE_MS = 600, RISE_MS = 700, SINK_MS = 700;
 
 export function createDock(ctx, nav) {
   const { S } = ctx;
@@ -28,7 +28,7 @@ export function createDock(ctx, nav) {
   const mod = i => ((i % N) + N) % N;
   const dir = () => (getComputedStyle(nav).direction === "rtl" ? -1 : 1);
   const current = () => Math.max(0, items.findIndex(b => b.dataset.mode === S.mode));
-  let pos = current(), anim = null, idleT = null, closeT = null, moveT = null, backT = null;
+  let pos = current(), anim = null, idleT = null, closeT = null, moveT = null, backT = null, riseT = null;
   let active = false, startX = 0, startPos = 0, moved = false, lastX = 0, lastT = 0, vel = 0, lastRelease = 0;
 
   /* Symbol, Größe und Text folgen dem Abstand zur Mitte, damit beim Gleiten nichts springt: der mittlere Knopf hebt sein
@@ -61,8 +61,15 @@ export function createDock(ctx, nav) {
     nav.classList.toggle("open", open); nav.setAttribute("aria-hidden", String(!open));
     knob.setAttribute("aria-expanded", String(open)); document.body.classList.toggle("dock-open", open);
     setTabs(open);
-    if (open) { stopGlide(); pos = current(); place(); items[current()].focus({ preventScroll: true }); idle(); }
-    else {
+    if (open) {
+      stopGlide(); pos = current();
+      /* Der mittlere Knopf beginnt wie der Knopf aussah (Symbol unten, kein Text) und wächst mit der Pille in seine Form;
+         zuerst ohne Übergang in den Anfangszustand, erst dann (nach einem Layout) mit Übergang ans Ziel */
+      const cur = items[current()], lbl = cur.querySelector(".lbl");
+      nav.classList.remove("rising"); cur.style.transform = "translate(0px, 0px) scale(1)"; if (lbl) lbl.style.opacity = "0";
+      void nav.offsetWidth; nav.classList.add("rising"); clearTimeout(riseT); riseT = setTimeout(() => nav.classList.remove("rising"), RISE_MS);
+      place(); cur.focus({ preventScroll: true }); idle();
+    } else {
       if (nav.contains(document.activeElement)) knob.focus({ preventScroll: true });
       // Erst sinkt die Pille, dann fährt der Knopf zurück in seine Ecke
       clearTimeout(backT); backT = setTimeout(() => knob.classList.remove("mid"), calm() ? 0 : SINK_MS);
@@ -81,7 +88,7 @@ export function createDock(ctx, nav) {
   }
 
   nav.addEventListener("pointerdown", e => {
-    stopGlide(); active = true; moved = false; vel = 0;
+    stopGlide(); nav.classList.remove("rising"); active = true; moved = false; vel = 0;
     try { nav.setPointerCapture(e.pointerId); } catch (x) {}
     startX = lastX = e.clientX; startPos = pos; lastT = performance.now(); idle();
   });

@@ -275,8 +275,13 @@ const toastOf = async (page, action) => {
     // The pill grows out of the knob to both sides and falls back into it: while it opens and while it closes it is narrower
     // than the full pill, centred on the knob, and still visible
     const pillAt = () => page.evaluate(() => { const n = document.querySelector("nav"), r = n.getBoundingClientRect(), k = document.querySelector(".knob").getBoundingClientRect(); return { w: Math.round(r.width), off: Math.round(r.left + r.width / 2 - (k.left + k.width / 2)), op: +getComputedStyle(n).opacity }; });
+    // The handover is seamless: the moment the pill is there the knob is gone, the pill fully visible, and the centred button still
+    // has the knob's look (scale 1, label hidden), growing into the pill's look with it
+    const handover = await page.evaluate(() => { const k = document.querySelector(".knob"), n = document.querySelector("nav"), b = n.querySelector("button.on"); return { knobOp: +getComputedStyle(k).opacity, navOp: +getComputedStyle(n).opacity, scale: +getComputedStyle(b).transform.split(",")[0].replace("matrix(", ""), lbl: +getComputedStyle(b.querySelector(".lbl")).opacity, rising: n.classList.contains("rising") }; });
     await sleep(100); const growing = await pillAt();
     await sleep(900); const grown = await pillAt();
+    const settled = await page.evaluate(() => { const b = document.querySelector("nav button.on"); return { scale: +getComputedStyle(b).transform.split(",")[0].replace("matrix(", ""), lbl: +getComputedStyle(b.querySelector(".lbl")).opacity, rising: document.querySelector("nav").classList.contains("rising") }; });
+    check("Eman: the knob hands over to the pill without overlap, the centred button grows from the knob's look into the pill's", handover.knobOp === 0 && handover.navOp === 1 && handover.scale < 1.12 && handover.lbl < 0.3 && handover.rising && Math.abs(settled.scale - 1.25) < 0.01 && settled.lbl === 1 && !settled.rising, { handover, settled });
     await page.keyboard.press("Escape"); await sleep(300); const falling = await pillAt();
     check("Eman: the pill grows out of the knob to both sides and falls back into it", growing.w > 58 && growing.w < grown.w && Math.abs(growing.off) <= 2 && growing.op > 0 && grown.w >= 300 && falling.w < grown.w && falling.w > 58 && Math.abs(falling.off) <= 2 && falling.op > 0.5, { growing, grown, falling });
     await page.waitForFunction(() => !document.querySelector("nav").classList.contains("open"), null, { timeout: 3000 });

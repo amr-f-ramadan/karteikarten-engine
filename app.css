@@ -109,8 +109,14 @@ button:focus-visible,.btn:focus-within,.card:focus-visible{outline:3px solid var
    nav::before. touch-action none: der Browser nimmt die Geste nicht. */
 nav{position:fixed;left:0;right:0;margin:0 auto;bottom:max(22px,calc(env(safe-area-inset-bottom,0px) + 10px));width:58px;height:58px;border-radius:40px;overflow:hidden;z-index:5;touch-action:none;
   opacity:0;pointer-events:none;transition:width .7s cubic-bezier(.22,1,.36,1),height .7s cubic-bezier(.22,1,.36,1),bottom .7s cubic-bezier(.22,1,.36,1),opacity .25s .45s}
+/* Beim Öffnen erscheint die Pille sofort (sie hat da genau die Größe und das Aussehen des Knopfs, der im selben Bild verschwindet):
+   zwei Glasschichten übereinander würden kurz flackern */
 nav.open{width:min(94%,380px);height:80px;bottom:max(16px,calc(env(safe-area-inset-bottom,0px) + 4px));opacity:1;pointer-events:auto;
-  transition:width .7s cubic-bezier(.22,1,.36,1),height .7s cubic-bezier(.22,1,.36,1),bottom .7s cubic-bezier(.22,1,.36,1),opacity .2s}
+  transition:width .7s cubic-bezier(.22,1,.36,1),height .7s cubic-bezier(.22,1,.36,1),bottom .7s cubic-bezier(.22,1,.36,1),opacity 0s}
+/* Während die Pille wächst, wächst der mittlere Knopf aus der Größe des Knopfs in seine (Symbol angehoben, Text eingeblendet);
+   beim Wischen setzt das Dock die Transformation Bild für Bild, dann darf nichts nachlaufen (rising wird entfernt) */
+nav.rising button{transition:transform .7s cubic-bezier(.22,1,.36,1)}
+nav.rising .lbl{transition:opacity .35s .2s}
 nav::before{content:"";position:absolute;top:4px;bottom:4px;left:50%;width:88px;margin-left:-44px;border-radius:999px;pointer-events:none;
   background:radial-gradient(circle at 50% 30%,color-mix(in srgb,var(--accent) 30%,transparent),transparent 72%),var(--glass-strong);box-shadow:inset 0 1px 0 var(--shine),0 6px 18px -8px var(--shadow)}
 nav button{all:unset;cursor:pointer;position:absolute;top:0;height:100%;left:50%;width:76px;margin-left:-38px;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:600;color:var(--muted);white-space:nowrap;will-change:transform;-webkit-tap-highlight-color:transparent}
@@ -128,10 +134,12 @@ nav button:focus-visible{outline:3px solid var(--accent);outline-offset:-3px;bor
   -webkit-backdrop-filter:blur(24px) saturate(170%);backdrop-filter:blur(24px) saturate(170%);--kx:calc(50vw - 47px);transform:translateX(var(--kx));transition:transform .6s cubic-bezier(.22,1,.36,1),opacity .4s}
 .knob.mid{transform:none}
 .knob svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.knob .kbadge{position:absolute;top:4px;inset-inline-end:2px;background:var(--again);color:#fff;border-radius:999px;font-size:.6rem;padding:0 5px;line-height:1.5;font-weight:700}
+/* Die Zahl sitzt auf dem Knopf genau dort, wo sie auf dem mittleren Knopf der Pille sitzt (#badge), damit sie beim Übergang nicht springt */
+.knob .kbadge{position:absolute;top:calc(50% - 20px);inset-inline-start:calc(50% + 10px);background:var(--again);color:#fff;border-radius:999px;font-size:.62rem;padding:0 6px;line-height:1.5;font-weight:700}
 .knob:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
-body.dock-open .knob{transform:scale(1.45);opacity:0;pointer-events:none}
-@media (prefers-reduced-motion:reduce){nav,.knob{transition:none}}
+/* Offen ist der Knopf sofort weg (die Pille steht an seiner Stelle); beim Schließen blendet er unter der fallenden Pille wieder ein */
+body.dock-open .knob{opacity:0;pointer-events:none;transition:opacity 0s}
+@media (prefers-reduced-motion:reduce){nav,.knob,nav.rising button,nav.rising .lbl{transition:none}}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + max(10px,calc(env(safe-area-inset-bottom,0px) - 14px)));color:var(--ink);padding:11px 16px;border-radius:16px;font-size:.9rem;z-index:6;max-width:90%}
 @media (prefers-reduced-motion:reduce){.btn{transition:none}}
 
