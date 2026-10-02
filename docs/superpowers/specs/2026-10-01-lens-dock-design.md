@@ -94,6 +94,10 @@ as the bar does today.
 - Rise and sink take 0.7 s with a softer ease (knob 0.7 s too).
 - The knob shows the due count only while it shows the view whose button holds `#badge` (learn); on the other views
   the knob is plain.
+- The knob lives in the bottom corner at the line end (right in de-karteikarten, left in eman-deutsch's RTL), 18 px from
+  the edge. A tap drives it to the middle (1 s, `transform`, the same ease as the pill), and only then does the pill
+  rise as before. After the pill has sunk (0.7 s) the knob drives back to its corner (1 s). A second tap while it is on
+  its way is ignored; a tap during the way back turns it round. Under reduced motion it jumps.
 
 ## Delivery
 

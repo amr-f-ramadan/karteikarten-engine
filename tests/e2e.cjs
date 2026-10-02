@@ -262,6 +262,21 @@ const toastOf = async (page, action) => {
     check("Eman: the knob shows the current view (Arabic label, icon), no count while it is not the learn view, pill closed", knob.label === "الإعدادات" && knob.icon && knob.badgeHidden && !knob.open, knob);
     check("Eman: the knob's count is announced with it, the hidden pill's buttons are out of the Tab order", knob.describedBy && knob.untabbable, knob);
     const openDock = async () => { await page.click(".knob"); await page.waitForFunction(() => document.querySelector("nav").classList.contains("open")); await sleep(800); }; // let the pill finish rising
+    // The knob lives in the bottom corner at the line end (left in RTL); a tap drives it to the middle in 1 s, there the pill rises;
+    // once the pill has sunk the knob drives back in 1 s
+    const knobX = () => page.evaluate(() => { const r = document.querySelector(".knob").getBoundingClientRect(); return { left: Math.round(r.left), mid: Math.round(r.left + r.width / 2 - innerWidth / 2) }; });
+    await page.waitForFunction(() => !document.querySelector(".knob").classList.contains("mid")); await sleep(1100); // the earlier close: let the knob reach its corner
+    const corner = await knobX();
+    const t0 = Date.now(); await page.click(".knob"); await sleep(250);
+    const halfway = { ...(await knobX()), open: await navOpen(page) };
+    await page.waitForFunction(() => document.querySelector("nav").classList.contains("open"), null, { timeout: 3000 });
+    const openedAfter = Date.now() - t0, arrived = await knobX();
+    check("Eman: the closed knob sits in the bottom left corner (RTL), drives to the middle for 1 s and only then does the pill rise", corner.left <= 24 && halfway.left > corner.left + 5 && halfway.mid < -15 && !halfway.open && openedAfter >= 900 && openedAfter < 2500 && Math.abs(arrived.mid) <= 2, { corner, halfway, openedAfter, arrived });
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => !document.querySelector("nav").classList.contains("open"), null, { timeout: 3000 });
+    await sleep(500); const afterSink = await knobX(); // the pill is still sinking: the knob waits in the middle
+    await sleep(1500); const returned = await knobX();
+    check("Eman: after the pill has sunk the knob drives back to its corner in 1 s", Math.abs(afterSink.mid) <= 2 && returned.left === corner.left, { afterSink, returned, corner });
     await openDock();
     const geometry = await page.evaluate(() => { const n = document.querySelector("nav").getBoundingClientRect(), mid = n.top + n.height / 2; return { height: n.height, off: [...document.querySelectorAll("nav button:not(.on) svg")].map(s => { const r = s.getBoundingClientRect(); return Math.round(Math.abs(r.top + r.height / 2 - mid) * 10) / 10; }) }; });
     check("Eman: the pill is 80 px high and the icons of the other views sit in its vertical middle", geometry.height >= 80 && geometry.off.length === 4 && geometry.off.every(o => o < 2), geometry);
@@ -297,7 +312,7 @@ const toastOf = async (page, action) => {
     const centred = await page.evaluate(() => document.querySelector("nav button.on").dataset.mode);
     await page.keyboard.press("Enter");
     await page.waitForFunction(() => !document.querySelector("nav").classList.contains("open"), null, { timeout: 7000 });
-    const entered = await page.evaluate(() => [document.querySelector("nav button[aria-current=page]").dataset.mode, document.activeElement.className]);
+    const entered = await page.evaluate(() => [document.querySelector("nav button[aria-current=page]").dataset.mode, document.activeElement.classList.contains("knob") ? "knob" : document.activeElement.className]);
     check("Eman: keyboard: Enter on the knob opens the pill on the current view, arrows turn it (RTL), Enter picks, focus returns to the knob", focused === "learn" && centred === "list" && entered[0] === "list" && entered[1] === "knob", { focused, centred, entered });
     await tab(page, "learn");
 
