@@ -523,6 +523,15 @@ const toastOf = async (page, action) => {
     await page.click('.arts [data-g="der"]');
     await grab(page, "quiz-answered");
     await page.screenshot({ path: SHOTS + "/light-7-quiz.png" });
+    // The quiz does not bring a noun back within eight questions: nine in a row are all different
+    const askedWords = [await page.textContent(".card.quiz .word")];
+    for (let i = 0; i < 8; i++) {
+      await clickOrDiagnose(page, '[data-act="nextq"]'); await sleep(100);
+      askedWords.push(await page.textContent(".card.quiz .word"));
+      await page.click('.arts [data-g="die"]'); await sleep(100);
+    }
+    const askedSet = new Set(askedWords.map(w => w.replace(/^(der|die|das|___)\s*/, "").trim()));
+    check("Eman: nine quiz questions in a row ask nine different nouns", askedWords.length === 9 && askedSet.size === 9, [...askedSet]);
 
     // Settings pages, reset dialog text
     await tab(page, "settings");
