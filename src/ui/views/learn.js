@@ -2,7 +2,7 @@
 import { esc, today, isP } from "../../core/text.js";
 import { dueByTomorrow, allowMoreNew } from "../../core/leitner.js";
 import { gClass } from "../../core/text.js";
-import { calm } from "../dom.js";
+import { $, calm } from "../dom.js";
 import { speakBtn, wordHTML, famRow, arLine, trLine, noteBox } from "../parts.js";
 
 export function createLearnView(ctx) {
@@ -41,8 +41,14 @@ export function createLearnView(ctx) {
         : `<button class="btn wide" data-act="flip">${T("show")}</button>`}
       <p class="meta dim">${T("todayStat").replace("{d}", due).replace("{f}", fresh)}</p>`;
   }
+  /* Läuft der Balken ab, dreht sich die Karte von selbst um; gezählt wird erst mit Nochmal/Gewusst. Der Balken selbst gibt
+     den Takt (sein Ende ist das Ereignis), darum gibt es ohne Balken (bewegungsarm) auch kein Umdrehen */
+  function after() {
+    const bar = $("#card .timer");
+    if (bar) bar.addEventListener("animationend", () => session.flip(), { once: true });
+  }
   return {
-    mode: "learn", render,
+    mode: "learn", render, after,
     sayCard: () => L.cur,
     actions: {
       flip: () => session.flip(),

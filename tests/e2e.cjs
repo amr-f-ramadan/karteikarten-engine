@@ -567,8 +567,12 @@ const toastOf = async (page, action) => {
     check("Eman: known card shows meaning first, asks for a German sentence, with timer", front.ar === "متين / ثابت" && front.timer && front.hint === "قوليها بالألماني في جملة كاملة", front);
     await grab(page, "learn-production");
     await page.screenshot({ path: SHOTS + "/light-10-production.png" });
+    // When the bar runs out the card turns by itself; it is only scored once Nochmal/Gewusst is tapped
+    const autoFlip = await page.waitForSelector("#card.flipped", { timeout: 7000 }).then(() => true, () => false);
+    const unscored = JSON.parse(await page.evaluate(() => localStorage.getItem("kk-eman-v2"))).cards.stabil;
+    check("Eman: the card turns by itself when the 5 second bar runs out, without being scored", autoFlip && unscored.due === 1 && unscored.b === 2, { autoFlip, unscored });
     // Only the due card is left (no new ones: today's limit is used up); "more new words" then writes today's date into the progress
-    await page.click("#card"); await sleep(450); await page.click('[data-act="yes"]'); await sleep(100);
+    await page.click('[data-act="yes"]'); await sleep(100);
     const more = await page.$('[data-act="more"]');
     if (more) { await more.click(); await sleep(100); }
     const nd = JSON.parse(await page.evaluate(() => localStorage.getItem("kk-eman-v2"))).newDay;
