@@ -92,6 +92,8 @@ as the bar does today.
   rises 9 px and its label fades in with the distance to the centre (nothing jumps mid-glide).
 - After a pick (tap or swipe) the pill stays up for the idle time (3.5 s) before it sinks, like an untouched pill.
 - Rise and sink take 0.7 s with a softer ease (knob 0.7 s too).
+- The knob shows the due count only while it shows the view whose button holds `#badge` (learn); on the other views
+  the knob is plain.
 
 ## Delivery
 

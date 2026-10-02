@@ -257,9 +257,9 @@ const toastOf = async (page, action) => {
     check("Eman: service worker registered for /eman-deutsch/", sw === `${ORIGIN}/eman-deutsch/`, sw);
 
     // Lens dock: one knob with the current view, a pill that rises, turns without end and sinks again
-    const knob = await page.evaluate(() => { const k = document.querySelector(".knob"), nav = document.querySelector("nav"); return { label: k && k.getAttribute("aria-label"), icon: !!(k && k.querySelector("svg path, svg rect")), badge: k && k.querySelector(".kbadge").textContent, navBadge: document.querySelector("#badge").textContent, open: nav.classList.contains("open"), describedBy: k && k.getAttribute("aria-describedby") === k.querySelector(".kbadge").id, untabbable: [...nav.querySelectorAll("button")].every(b => b.tabIndex === -1) }; });
+    const knob = await page.evaluate(() => { const k = document.querySelector(".knob"), nav = document.querySelector("nav"); return { label: k && k.getAttribute("aria-label"), icon: !!(k && k.querySelector("svg path, svg rect")), badgeHidden: k && k.querySelector(".kbadge").hidden, navBadge: document.querySelector("#badge").textContent, open: nav.classList.contains("open"), describedBy: k && k.getAttribute("aria-describedby") === k.querySelector(".kbadge").id, untabbable: [...nav.querySelectorAll("button")].every(b => b.tabIndex === -1) }; });
     // (the settings tab is open at this point; a swipe to the right in RTL moves on to the next view, which wraps round to learn)
-    check("Eman: the knob shows the current view (Arabic label, icon, due count), pill closed", knob.label === "الإعدادات" && knob.icon && knob.badge === knob.navBadge && !knob.open, knob);
+    check("Eman: the knob shows the current view (Arabic label, icon), no count while it is not the learn view, pill closed", knob.label === "الإعدادات" && knob.icon && knob.badgeHidden && !knob.open, knob);
     check("Eman: the knob's count is announced with it, the hidden pill's buttons are out of the Tab order", knob.describedBy && knob.untabbable, knob);
     const openDock = async () => { await page.click(".knob"); await page.waitForFunction(() => document.querySelector("nav").classList.contains("open")); await sleep(800); }; // let the pill finish rising
     await openDock();
@@ -275,9 +275,9 @@ const toastOf = async (page, action) => {
     const stillUp = await navOpen(page); // after the pick the pill stays up for the idle time
     const badgeIn = await page.evaluate(() => { const b = document.querySelector("#badge").getBoundingClientRect(), n = document.querySelector("nav").getBoundingClientRect(); return b.top >= n.top && b.bottom <= n.bottom; }); // the raised centred icon's count stays inside the pill
     await page.waitForFunction(() => !document.querySelector("nav").classList.contains("open"), null, { timeout: 7000 });
-    const swiped = await page.evaluate(() => ({ early: null, stillUp: null, badgeIn: null, mode: document.querySelector("nav button[aria-current=page]").dataset.mode, card: !!document.querySelector("#card"), knob: document.querySelector(".knob").getAttribute("aria-label") }));
+    const swiped = await page.evaluate(() => { const kb = document.querySelector(".knob .kbadge"); return { early: null, stillUp: null, badgeIn: null, mode: document.querySelector("nav button[aria-current=page]").dataset.mode, card: !!document.querySelector("#card"), knob: document.querySelector(".knob").getAttribute("aria-label"), knobCount: kb.hidden ? null : kb.textContent, navBadge: document.querySelector("#badge").textContent }; });
     swiped.early = early; swiped.stillUp = stillUp; swiped.badgeIn = badgeIn;
-    check("Eman: a swipe to the right (RTL) settles on the next view round the loop, switches to it, stays up a while (count inside the pill) and then sinks", early === "settings" && stillUp && badgeIn && swiped.mode === "learn" && swiped.card && swiped.knob === "مذاكرة", swiped);
+    check("Eman: a swipe to the right (RTL) settles on the next view round the loop, switches to it, stays up a while (count inside the pill) and then sinks; the knob now carries the count", early === "settings" && stillUp && badgeIn && swiped.mode === "learn" && swiped.card && swiped.knob === "مذاكرة" && swiped.knobCount === swiped.navBadge, swiped);
     await openDock();
     await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange"))); await sleep(700); // a sync and its render while the pill is open
     check("Eman: a render while the pill is open leaves it open", await navOpen(page));
