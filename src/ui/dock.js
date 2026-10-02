@@ -2,8 +2,10 @@
 // Ansicht und die fälligen Karten; ein Tipp hebt die Pille, Wischen dreht die Ansichten ohne Ende, ein Tipp wählt,
 // danach sinkt die Pille wieder. Die Apps liefern nur ihre nav-Knöpfe (Symbol, Text, #badge).
 import { nearestTurn, settleTarget, glideDuration } from "../core/dock.js";
+import { calm } from "./dom.js";
 
-const SLOT = 76, TAP_PX = 6, IDLE_MS = 3500;
+// MOVE_MS: der Weg des Knopfs zwischen Ecke und Mitte, SINK_MS: das Sinken der Pille (beide wie in app.css)
+const SLOT = 76, TAP_PX = 6, IDLE_MS = 3500, MOVE_MS = 1000, SINK_MS = 700;
 
 export function createDock(ctx, nav) {
   const { S } = ctx;
@@ -26,7 +28,7 @@ export function createDock(ctx, nav) {
   const mod = i => ((i % N) + N) % N;
   const dir = () => (getComputedStyle(nav).direction === "rtl" ? -1 : 1);
   const current = () => Math.max(0, items.findIndex(b => b.dataset.mode === S.mode));
-  let pos = current(), anim = null, idleT = null, closeT = null;
+  let pos = current(), anim = null, idleT = null, closeT = null, moveT = null, backT = null;
   let active = false, startX = 0, startPos = 0, moved = false, lastX = 0, lastT = 0, vel = 0, lastRelease = 0;
 
   /* Symbol, Größe und Text folgen dem Abstand zur Mitte, damit beim Gleiten nichts springt: der mittlere Knopf hebt sein
@@ -60,7 +62,17 @@ export function createDock(ctx, nav) {
     knob.setAttribute("aria-expanded", String(open)); document.body.classList.toggle("dock-open", open);
     setTabs(open);
     if (open) { stopGlide(); pos = current(); place(); items[current()].focus({ preventScroll: true }); idle(); }
-    else if (nav.contains(document.activeElement)) knob.focus({ preventScroll: true });
+    else {
+      if (nav.contains(document.activeElement)) knob.focus({ preventScroll: true });
+      // Erst sinkt die Pille, dann fährt der Knopf zurück in seine Ecke
+      clearTimeout(backT); backT = setTimeout(() => knob.classList.remove("mid"), calm() ? 0 : SINK_MS);
+    }
+  }
+  /* Ein Tipp auf den Knopf in der Ecke: er fährt in die Mitte, dort steigt die Pille auf; unterwegs zählt kein zweiter Tipp */
+  function summon() {
+    if (moveT) return;
+    clearTimeout(backT); knob.classList.add("mid");
+    moveT = setTimeout(() => { moveT = null; setOpen(true); }, calm() ? 0 : MOVE_MS);
   }
   /* Erst landet die Reihe, dann wechselt die Ansicht; die Pille bleibt noch die Ruhezeit oben und sinkt dann */
   function pick(target) {
@@ -109,7 +121,7 @@ export function createDock(ctx, nav) {
     const target = Math.round(pos) + (e.key === "ArrowRight" ? 1 : -1) * dir();
     glideTo(target); items[mod(target)].focus({ preventScroll: true });
   });
-  knob.addEventListener("click", () => setOpen(true));
+  knob.addEventListener("click", summon);
 
   /* Nach jedem Zeichnen: aktive Ansicht markieren, Zahl in Leiste und Knopf, Symbol und Name der Ansicht auf dem Knopf */
   function refresh(dueN) {
