@@ -85,6 +85,14 @@ as the bar does today.
 - Not verifiable here: the feel on a real iPhone (momentum, the knob's distance from the home indicator), Safari's
   backdrop blur on the moving pill. Named in the PR with what to try on the phone.
 
+## Tuned after use on the phone (2026-10-02)
+
+- Pill 80 px high, 94 % wide (max 380 px), slots 76 px, lens 88 × 72 px, icons 26 px.
+- The label sits outside the flow, so the icons of the other views are in the pill's vertical middle; the centred icon
+  rises 9 px and its label fades in with the distance to the centre (nothing jumps mid-glide).
+- After a pick (tap or swipe) the pill stays up for the idle time (3.5 s) before it sinks, like an untouched pill.
+- Rise and sink take 0.7 s with a softer ease (knob 0.7 s too).
+
 ## Delivery
 
 - Engine branch `lens-dock`, one PR; commits: pure core + tests, dock module + CSS + router, e2e updates, docs

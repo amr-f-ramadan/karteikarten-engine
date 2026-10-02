@@ -156,9 +156,12 @@ const clickOrDiagnose = async (page, sel) => {
     throw new Error(`${e.message.split("\n")[0]} | script thread: ${alive} | element: ${dom} | stack: ${stack}`);
   }
 };
+// (after the pick the pill stays up for the idle time; Escape sinks it at once so the suite does not wait)
 const tab = async (page, mode) => {
   await page.click(".knob"); await page.waitForFunction(() => document.querySelector("nav").classList.contains("open"));
   await page.click(`nav button[data-mode=${mode}]`);
+  await page.waitForFunction(m => document.querySelector("nav button[aria-current=page]").dataset.mode === m, mode, { timeout: 6000 });
+  await page.keyboard.press("Escape");
   await page.waitForFunction(() => !document.querySelector("nav").classList.contains("open"), null, { timeout: 3000 });
 };
 // Clears the toast, runs the action, then waits for the new toast it produces
@@ -258,17 +261,23 @@ const toastOf = async (page, action) => {
     // (the settings tab is open at this point; a swipe to the right in RTL moves on to the next view, which wraps round to learn)
     check("Eman: the knob shows the current view (Arabic label, icon, due count), pill closed", knob.label === "الإعدادات" && knob.icon && knob.badge === knob.navBadge && !knob.open, knob);
     check("Eman: the knob's count is announced with it, the hidden pill's buttons are out of the Tab order", knob.describedBy && knob.untabbable, knob);
-    const openDock = async () => { await page.click(".knob"); await page.waitForFunction(() => document.querySelector("nav").classList.contains("open")); await sleep(450); }; // let the pill finish rising
+    const openDock = async () => { await page.click(".knob"); await page.waitForFunction(() => document.querySelector("nav").classList.contains("open")); await sleep(800); }; // let the pill finish rising
     await openDock();
+    const geometry = await page.evaluate(() => { const n = document.querySelector("nav").getBoundingClientRect(), mid = n.top + n.height / 2; return { height: n.height, off: [...document.querySelectorAll("nav button:not(.on) svg")].map(s => { const r = s.getBoundingClientRect(); return Math.round(Math.abs(r.top + r.height / 2 - mid) * 10) / 10; }) }; });
+    check("Eman: the pill is 80 px high and the icons of the other views sit in its vertical middle", geometry.height >= 80 && geometry.off.length === 4 && geometry.off.every(o => o < 2), geometry);
     const bb = await (await page.$("nav")).boundingBox(), midX = bb.x + bb.width / 2, midY = bb.y + bb.height / 2;
     await page.mouse.move(midX, midY); await page.mouse.down();
     for (let i = 1; i <= 9; i++) { await page.mouse.move(midX + i * 8, midY); await sleep(40); }
     await sleep(120); await page.mouse.up(); await sleep(40);
     const early = await page.evaluate(() => document.querySelector("nav button[aria-current=page]").dataset.mode); // the row is still gliding: no switch yet
-    await page.waitForFunction(() => !document.querySelector("nav").classList.contains("open"), null, { timeout: 3000 });
-    const swiped = await page.evaluate(() => ({ early: null, mode: document.querySelector("nav button[aria-current=page]").dataset.mode, card: !!document.querySelector("#card"), knob: document.querySelector(".knob").getAttribute("aria-label") }));
-    swiped.early = early;
-    check("Eman: a swipe to the right (RTL) settles on the next view round the loop, then switches to it and the pill sinks", early === "settings" && swiped.mode === "learn" && swiped.card && swiped.knob === "مذاكرة", swiped);
+    await page.waitForFunction(() => document.querySelector("nav button[aria-current=page]").dataset.mode === "learn", null, { timeout: 3000 });
+    await sleep(1500);
+    const stillUp = await navOpen(page); // after the pick the pill stays up for the idle time
+    const badgeIn = await page.evaluate(() => { const b = document.querySelector("#badge").getBoundingClientRect(), n = document.querySelector("nav").getBoundingClientRect(); return b.top >= n.top && b.bottom <= n.bottom; }); // the raised centred icon's count stays inside the pill
+    await page.waitForFunction(() => !document.querySelector("nav").classList.contains("open"), null, { timeout: 7000 });
+    const swiped = await page.evaluate(() => ({ early: null, stillUp: null, badgeIn: null, mode: document.querySelector("nav button[aria-current=page]").dataset.mode, card: !!document.querySelector("#card"), knob: document.querySelector(".knob").getAttribute("aria-label") }));
+    swiped.early = early; swiped.stillUp = stillUp; swiped.badgeIn = badgeIn;
+    check("Eman: a swipe to the right (RTL) settles on the next view round the loop, switches to it, stays up a while (count inside the pill) and then sinks", early === "settings" && stillUp && badgeIn && swiped.mode === "learn" && swiped.card && swiped.knob === "مذاكرة", swiped);
     await openDock();
     await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange"))); await sleep(700); // a sync and its render while the pill is open
     check("Eman: a render while the pill is open leaves it open", await navOpen(page));
@@ -278,15 +287,16 @@ const toastOf = async (page, action) => {
     await page.mouse.move(midX, midY); await page.mouse.down(); await page.mouse.move(midX + 30, midY);
     await page.evaluate(() => document.querySelector("nav").dispatchEvent(new PointerEvent("pointercancel", { bubbles: true })));
     await page.mouse.up(); await sleep(1000);
-    const cancelled = await page.evaluate(() => ({ open: document.querySelector("nav").classList.contains("open"), mode: document.querySelector("nav button[aria-current=page]").dataset.mode }));
-    check("Eman: a cancelled touch still settles on an icon and the pill sinks", !cancelled.open && cancelled.mode === "learn", cancelled);
+    const cancelled = await page.evaluate(() => ({ open: document.querySelector("nav").classList.contains("open"), mode: document.querySelector("nav button[aria-current=page]").dataset.mode, between: [...document.querySelectorAll("nav button")].some(b => /translate\(-?\d+\.[1-9]/.test(b.style.transform)) }));
+    await sleep(3500); cancelled.sunk = !(await navOpen(page));
+    check("Eman: a cancelled touch still settles on an icon and the pill sinks after the idle time", cancelled.open && !cancelled.between && cancelled.mode === "learn" && cancelled.sunk, cancelled);
     // Keyboard: Enter on the knob opens the pill with focus on the current view, arrows turn it, Enter picks, focus returns to the knob
     await page.focus(".knob"); await page.keyboard.press("Enter"); await page.waitForFunction(() => document.querySelector("nav").classList.contains("open")); await sleep(450);
     const focused = await page.evaluate(() => document.activeElement.dataset.mode);
     await page.keyboard.press("ArrowLeft"); await sleep(300); await page.keyboard.press("ArrowLeft"); await sleep(300);
     const centred = await page.evaluate(() => document.querySelector("nav button.on").dataset.mode);
     await page.keyboard.press("Enter");
-    await page.waitForFunction(() => !document.querySelector("nav").classList.contains("open"), null, { timeout: 3000 });
+    await page.waitForFunction(() => !document.querySelector("nav").classList.contains("open"), null, { timeout: 7000 });
     const entered = await page.evaluate(() => [document.querySelector("nav button[aria-current=page]").dataset.mode, document.activeElement.className]);
     check("Eman: keyboard: Enter on the knob opens the pill on the current view, arrows turn it (RTL), Enter picks, focus returns to the knob", focused === "learn" && centred === "list" && entered[0] === "list" && entered[1] === "knob", { focused, centred, entered });
     await tab(page, "learn");

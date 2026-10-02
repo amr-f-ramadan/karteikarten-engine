@@ -3,7 +3,7 @@
 // danach sinkt die Pille wieder. Die Apps liefern nur ihre nav-Knöpfe (Symbol, Text, #badge).
 import { nearestTurn, settleTarget, glideDuration } from "../core/dock.js";
 
-const SLOT = 72, TAP_PX = 6, IDLE_MS = 3500;
+const SLOT = 76, TAP_PX = 6, IDLE_MS = 3500;
 
 export function createDock(ctx, nav) {
   const { S } = ctx;
@@ -29,12 +29,15 @@ export function createDock(ctx, nav) {
   let pos = current(), anim = null, idleT = null, closeT = null;
   let active = false, startX = 0, startPos = 0, moved = false, lastX = 0, lastT = 0, vel = 0, lastRelease = 0;
 
+  /* Symbol, Größe und Text folgen dem Abstand zur Mitte, damit beim Gleiten nichts springt: der mittlere Knopf hebt sein
+     Symbol an und zeigt seinen Text, die anderen sitzen in der Mitte der Pille */
   function place() {
     const on = mod(Math.round(pos));
     items.forEach((b, i) => {
-      const d = nearestTurn(i - pos, N), s = Math.max(0.8, 1.25 - Math.abs(d) * 0.35);
-      b.style.transform = `translate(${(d * SLOT * dir()).toFixed(1)}px, ${i === on ? -3 : 0}px) scale(${s.toFixed(3)})`;
+      const d = nearestTurn(i - pos, N), near = Math.max(0, 1 - Math.abs(d)), s = Math.max(0.8, 1.25 - Math.abs(d) * 0.35);
+      b.style.transform = `translate(${(d * SLOT * dir()).toFixed(1)}px, ${(-9 * near).toFixed(1)}px) scale(${s.toFixed(3)})`;
       b.style.opacity = Math.abs(d) > 2.6 ? 0 : 1;
+      const lbl = b.querySelector(".lbl"); if (lbl) lbl.style.opacity = Math.max(0, 2 * near - 1).toFixed(2);
       b.classList.toggle("on", i === on);
     });
   }
@@ -59,10 +62,10 @@ export function createDock(ctx, nav) {
     if (open) { stopGlide(); pos = current(); place(); items[current()].focus({ preventScroll: true }); idle(); }
     else if (nav.contains(document.activeElement)) knob.focus({ preventScroll: true });
   }
-  /* Erst landet die Reihe, dann wechselt die Ansicht und die Pille sinkt: kein Neuzeichnen, während sie gleitet */
+  /* Erst landet die Reihe, dann wechselt die Ansicht; die Pille bleibt noch die Ruhezeit oben und sinkt dann */
   function pick(target) {
     clearTimeout(idleT); clearTimeout(closeT);
-    glideTo(target, () => { ctx.go(items[mod(target)].dataset.mode); closeT = setTimeout(() => setOpen(false), 160); });
+    glideTo(target, () => { ctx.go(items[mod(target)].dataset.mode); closeT = setTimeout(() => setOpen(false), IDLE_MS); });
   }
 
   nav.addEventListener("pointerdown", e => {
