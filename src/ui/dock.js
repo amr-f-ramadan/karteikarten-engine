@@ -5,7 +5,7 @@ import { nearestTurn, settleTarget, glideDuration } from "../core/dock.js";
 import { calm } from "./dom.js";
 
 // MOVE_MS: der Weg des Knopfs zwischen Ecke und Mitte, SINK_MS: das Sinken der Pille (beide wie in app.css)
-const SLOT = 76, TAP_PX = 6, IDLE_MS = 3500, MOVE_MS = 1000, SINK_MS = 700;
+const SLOT = 76, TAP_PX = 6, IDLE_MS = 3500, MOVE_MS = 600, SINK_MS = 700;
 
 export function createDock(ctx, nav) {
   const { S } = ctx;
