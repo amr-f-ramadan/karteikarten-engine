@@ -15,7 +15,7 @@ The engine holds no personal data or settings: no texts, word lists, progress, c
 - `app.css`: glass design; colours, fonts and orb colours come from each app's `index.html`
 - `src/core/`: pure logic, no DOM, shared with the tools: `text` (keys, slugs, stems), `leitner` (boxes, due and new cards), `progress` (merge, prune), `store` (card list with indexes: words, phrases, nouns, families, lookups, search text), `prompt` (Gemini requests and answer shapes), `diff` (marked corrections), `cardsfile` (cards.js read/append/rewrite), `quiz` (which noun the article quiz asks next: weighted by past answers, the last eight are skipped)
 - `src/services/`: browser I/O: `github` (contents API with ETag/304, progress branch, cards.js edits), `gemini` (text with model fallback, speech), `voice` (Gemini voice cache in IndexedDB with a size cap, device fallback), `push` (reminders), `sync` (progress sync), `local` (localStorage)
-- `src/ui/`: `dom` (helpers, hold, loading ring), `parts` (HTML building blocks), `router` (render, `go(mode)`, action registry: `data-act` → handler, inputs by id), `dock` (the tab bar as a pill behind one knob: swipe or tap to switch views; the apps only supply their `<nav>` buttons), `views/` one module per tab
+- `src/ui/`: `dom` (helpers, hold, loading ring), `parts` (HTML building blocks), `router` (render, `go(mode)`, action registry: `data-act` → handler, inputs by id), `dock` (the tab bar as a pill that grows out of one knob in the corner: swipe or tap to switch views, horizontal at the bottom or vertical at the right edge by option; the apps only supply their `<nav>` buttons), `listing` (what the word and phrase lists share), `views/` one module per tab
 - `src/session.js` (learning queue), `src/vocab.js` (new cards, phrases, deletion, waitlist worker), `src/state.js`, `src/main.js` (wiring)
 - `tools/remind.mjs`: daily reminder, run by each app's workflow from the app's folder; counts with `src/core`
 - `tools/pending.mjs`: creates cards for the waitlist on GitHub (not scheduled); prompts and ids from `src/core`
@@ -28,7 +28,7 @@ The engine holds no personal data or settings: no texts, word lists, progress, c
 
 ## Phrases
 
-With `window.APP.phrases` set, the list tab switches between words and phrases (openers, fillers, set phrases). Phrases are ordinary entries in `cards.js` with `"k":"p"` and `"g":"x"`, grouped by `cat` (what they are for). They are reviewed in the learning tab with their own daily limit for new ones (`newDay.p` in the progress), are left out of the article quiz, word families and practice words, and the + in speaking practice saves to them. Without `phrases` the app behaves as before.
+With `window.APP.phrases` set, the phrases (openers, fillers, set phrases) get their own tab next to the words (`data-mode="phrases"` in the app's nav). Phrases are ordinary entries in `cards.js` with `"k":"p"` and `"g":"x"`, grouped by `cat` (what they are for). They are reviewed in the learning tab with their own daily limit for new ones (`newDay.p` in the progress), are left out of the article quiz, word families and practice words, and the + in speaking practice saves to them. Without `phrases` the app behaves as before.
 
 ## Working on the engine
 

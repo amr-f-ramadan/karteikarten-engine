@@ -1,6 +1,7 @@
-// Dock: die Tab-Leiste ist eine Pille hinter einem runden Knopf unten in der Mitte. Der Knopf zeigt die aktuelle
-// Ansicht und die fälligen Karten; ein Tipp hebt die Pille, Wischen dreht die Ansichten ohne Ende, ein Tipp wählt,
-// danach sinkt die Pille wieder. Die Apps liefern nur ihre nav-Knöpfe (Symbol, Text, #badge).
+// Dock: die Tab-Leiste ist eine Pille hinter einem runden Knopf in der Ecke. Der Knopf zeigt die aktuelle Ansicht und die
+// fälligen Karten; ein Tipp fährt ihn in die Mitte und lässt die Pille aus ihm wachsen, Wischen dreht die Ansichten ohne
+// Ende, ein Tipp wählt, danach fällt die Pille in den Knopf zurück. Waagerecht (unten) oder senkrecht (rechts, Option
+// dockV). Die Apps liefern nur ihre nav-Knöpfe (Symbol, Text, #badge).
 import { nearestTurn, settleTarget, glideDuration } from "../core/dock.js";
 import { calm } from "./dom.js";
 
@@ -26,18 +27,22 @@ export function createDock(ctx, nav) {
   setTabs(false);
 
   const mod = i => ((i % N) + N) % N;
-  const dir = () => (getComputedStyle(nav).direction === "rtl" ? -1 : 1);
+  // Senkrecht läuft die Reihe von oben nach unten, in beiden Schreibrichtungen; waagerecht ist sie in RTL gespiegelt
+  const isV = () => document.body.classList.contains("dock-v");
+  const dir = () => (!isV() && getComputedStyle(nav).direction === "rtl" ? -1 : 1);
+  const axis = e => (isV() ? e.clientY : e.clientX);
   const current = () => Math.max(0, items.findIndex(b => b.dataset.mode === S.mode));
   let pos = current(), anim = null, idleT = null, closeT = null, moveT = null, backT = null, riseT = null;
   let active = false, startX = 0, startPos = 0, moved = false, lastX = 0, lastT = 0, vel = 0, lastRelease = 0;
 
   /* Symbol, Größe und Text folgen dem Abstand zur Mitte, damit beim Gleiten nichts springt: der mittlere Knopf hebt sein
-     Symbol an und zeigt seinen Text, die anderen sitzen in der Mitte der Pille */
+     Symbol an (senkrecht: rückt es nach innen) und zeigt seinen Text, die anderen sitzen in der Mitte der Pille */
   function place() {
-    const on = mod(Math.round(pos));
+    const on = mod(Math.round(pos)), v = isV();
     items.forEach((b, i) => {
       const d = nearestTurn(i - pos, N), near = Math.max(0, 1 - Math.abs(d)), s = Math.max(0.8, 1.25 - Math.abs(d) * 0.35);
-      b.style.transform = `translate(${(d * SLOT * dir()).toFixed(1)}px, ${(-9 * near).toFixed(1)}px) scale(${s.toFixed(3)})`;
+      const along = (d * SLOT * dir()).toFixed(1), lift = (-9 * near).toFixed(1);
+      b.style.transform = `translate(${v ? lift : along}px, ${v ? along : lift}px) scale(${s.toFixed(3)})`;
       b.style.opacity = Math.abs(d) > 2.6 ? 0 : 1;
       const lbl = b.querySelector(".lbl"); if (lbl) lbl.style.opacity = Math.max(0, 2 * near - 1).toFixed(2);
       b.classList.toggle("on", i === on);
@@ -71,6 +76,8 @@ export function createDock(ctx, nav) {
       place(); cur.focus({ preventScroll: true }); idle();
     } else {
       if (nav.contains(document.activeElement)) knob.focus({ preventScroll: true });
+      // Der Text verschwindet sofort, sonst stünde er noch unter dem Symbol, während die Pille in den Knopf fällt
+      items.forEach(b => { const l = b.querySelector(".lbl"); if (l) l.style.opacity = "0"; });
       // Erst sinkt die Pille, dann fährt der Knopf zurück in seine Ecke
       clearTimeout(backT); backT = setTimeout(() => knob.classList.remove("mid"), calm() ? 0 : SINK_MS);
     }
@@ -90,14 +97,14 @@ export function createDock(ctx, nav) {
   nav.addEventListener("pointerdown", e => {
     stopGlide(); nav.classList.remove("rising"); active = true; moved = false; vel = 0;
     try { nav.setPointerCapture(e.pointerId); } catch (x) {}
-    startX = lastX = e.clientX; startPos = pos; lastT = performance.now(); idle();
+    startX = lastX = axis(e); startPos = pos; lastT = performance.now(); idle();
   });
   nav.addEventListener("pointermove", e => {
     if (!active) return;
-    const dx = e.clientX - startX, now = performance.now();
+    const x = axis(e), dx = x - startX, now = performance.now();
     if (Math.abs(dx) > TAP_PX) moved = true;
-    if (now > lastT) vel = (e.clientX - lastX) / (now - lastT);
-    lastX = e.clientX; lastT = now;
+    if (now > lastT) vel = (x - lastX) / (now - lastT);
+    lastX = x; lastT = now;
     pos = startPos - dx * dir() / SLOT; place();
   });
   // Der ganzzahlige Platz, an dem ein Knopf an seiner nächsten Runde liegt (pos kann mitten im Gleiten gebrochen sein)
@@ -120,18 +127,21 @@ export function createDock(ctx, nav) {
     const b = e.target.closest("button[data-mode]"); if (!b) return;
     active = false; pick(slotOf(b));
   });
-  /* Pfeiltasten drehen die Reihe (in RTL gespiegelt), Escape schließt */
+  /* Pfeiltasten drehen die Reihe (waagerecht in RTL gespiegelt, senkrecht auch mit Auf und Ab), Escape schließt */
   nav.addEventListener("keydown", e => {
     if (e.key === "Escape") { e.preventDefault(); setOpen(false); return; }
-    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    const step = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: isV() ? 1 : 0, ArrowUp: isV() ? -1 : 0 }[e.key];
+    if (!step) return;
     e.preventDefault(); stopGlide(); idle();
-    const target = Math.round(pos) + (e.key === "ArrowRight" ? 1 : -1) * dir();
+    const target = Math.round(pos) + step * dir();
     glideTo(target); items[mod(target)].focus({ preventScroll: true });
   });
   knob.addEventListener("click", summon);
 
   /* Nach jedem Zeichnen: aktive Ansicht markieren, Zahl in Leiste und Knopf, Symbol und Name der Ansicht auf dem Knopf */
   function refresh(dueN) {
+    // Die Ausrichtung ist eine Option (Aussehen): die Klasse am body schaltet CSS und Achse um
+    const v = !!ctx.opt("dockV", false); if (v !== isV()) { document.body.classList.toggle("dock-v", v); place(); }
     const cur = items[current()];
     items.forEach(b => b.setAttribute("aria-current", b === cur ? "page" : "false"));
     const bd = document.getElementById("badge"); if (bd) { bd.textContent = dueN; bd.hidden = !dueN; }

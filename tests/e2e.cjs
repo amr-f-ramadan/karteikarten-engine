@@ -159,6 +159,8 @@ const clickOrDiagnose = async (page, sel) => {
 // (after the pick the pill stays up for the idle time; Escape sinks it at once so the suite does not wait)
 const tab = async (page, mode) => {
   await page.click(".knob"); await page.waitForFunction(() => document.querySelector("nav").classList.contains("open"));
+  // Six views: the one opposite the current view lies beyond the pill's edge (faded out); a turn brings it in, like a short swipe
+  for (let i = 0; i < 3 && !(await page.evaluate(m => +document.querySelector(`nav button[data-mode=${m}]`).style.opacity > 0, mode)); i++) { await page.keyboard.press("ArrowRight"); await sleep(400); }
   await page.click(`nav button[data-mode=${mode}]`);
   await page.waitForFunction(m => document.querySelector("nav button[aria-current=page]").dataset.mode === m, mode, { timeout: 6000 });
   await page.keyboard.press("Escape");
@@ -250,6 +252,8 @@ const toastOf = async (page, action) => {
     check("Eman: progress stays under key kk-eman-v2 on branch progress", gh.log.some(e => e.method === "GET" && e.path.endsWith("/progress.json") && e.ref === "progress"));
     const syncState = await (async () => { await tab(page, "settings"); return page.textContent("#syncState"); })();
     check("Eman: sync status is Arabic 'متزامن'", syncState === "متزامن", syncState);
+    const groups = await page.$$eval(".settings .grp .gh", els => els.map(e => e.textContent));
+    check("Eman: the settings come in four Arabic groups (functions, learning, look, data)", JSON.stringify(groups) === JSON.stringify(["الوظايف", "المذاكرة", "الشكل", "البيانات"]) && !!(await page.$("#dkv")), groups);
     await grab(page, "settings-with-token");
     const htmlAttrs = await page.evaluate(() => [document.documentElement.lang, document.documentElement.dir, document.title, document.querySelector("header h1").textContent, document.querySelector('meta[name="apple-mobile-web-app-title"]').content]);
     check("Eman: lang/dir/title/header/home-screen name unchanged", JSON.stringify(htmlAttrs) === JSON.stringify(["ar", "rtl", "كروت ألماني", "كلمات ألماني", "Deutsch"]), htmlAttrs);
@@ -283,14 +287,15 @@ const toastOf = async (page, action) => {
     const settled = await page.evaluate(() => { const b = document.querySelector("nav button.on"); return { scale: +getComputedStyle(b).transform.split(",")[0].replace("matrix(", ""), lbl: +getComputedStyle(b.querySelector(".lbl")).opacity, rising: document.querySelector("nav").classList.contains("rising") }; });
     check("Eman: the knob hands over to the pill without overlap, the centred button grows from the knob's look into the pill's", handover.knobOp === 0 && handover.navOp === 1 && handover.scale < 1.12 && handover.lbl < 0.3 && handover.rising && Math.abs(settled.scale - 1.25) < 0.01 && settled.lbl === 1 && !settled.rising, { handover, settled });
     await page.keyboard.press("Escape"); await sleep(300); const falling = await pillAt();
-    check("Eman: the pill grows out of the knob to both sides and falls back into it", growing.w > 58 && growing.w < grown.w && Math.abs(growing.off) <= 2 && growing.op > 0 && grown.w >= 300 && falling.w < grown.w && falling.w > 58 && Math.abs(falling.off) <= 2 && falling.op > 0.5, { growing, grown, falling });
+    falling.lbl = await page.evaluate(() => +getComputedStyle(document.querySelector("nav button.on .lbl")).opacity); // the label is gone while the pill still falls
+    check("Eman: the pill grows out of the knob to both sides and falls back into it, its label gone at once", growing.w > 58 && growing.w < grown.w && Math.abs(growing.off) <= 2 && growing.op > 0 && grown.w >= 300 && falling.w < grown.w && falling.w > 58 && Math.abs(falling.off) <= 2 && falling.op > 0.5 && falling.lbl === 0, { growing, grown, falling });
     await page.waitForFunction(() => !document.querySelector("nav").classList.contains("open"), null, { timeout: 3000 });
     await sleep(200); const afterSink = await knobX(); // the pill is still falling into the knob: it waits in the middle
     await sleep(1100); const returned = await knobX();
     check("Eman: after the pill has sunk the knob drives back to its corner in 0.6 s", Math.abs(afterSink.mid) <= 2 && returned.right === corner.right, { afterSink, returned, corner });
     await openDock();
     const geometry = await page.evaluate(() => { const n = document.querySelector("nav").getBoundingClientRect(), mid = n.top + n.height / 2; return { height: n.height, off: [...document.querySelectorAll("nav button:not(.on) svg")].map(s => { const r = s.getBoundingClientRect(); return Math.round(Math.abs(r.top + r.height / 2 - mid) * 10) / 10; }) }; });
-    check("Eman: the pill is 80 px high and the icons of the other views sit in its vertical middle", geometry.height >= 80 && geometry.off.length === 4 && geometry.off.every(o => o < 2), geometry);
+    check("Eman: the pill is 80 px high and the icons of the other views sit in its vertical middle", geometry.height >= 80 && geometry.off.length === 5 && geometry.off.every(o => o < 2), geometry);
     const bb = await (await page.$("nav")).boundingBox(), midX = bb.x + bb.width / 2, midY = bb.y + bb.height / 2;
     await page.mouse.move(midX, midY); await page.mouse.down();
     for (let i = 1; i <= 9; i++) { await page.mouse.move(midX + i * 8, midY); await sleep(40); }
@@ -325,6 +330,25 @@ const toastOf = async (page, action) => {
     await page.waitForFunction(() => !document.querySelector("nav").classList.contains("open"), null, { timeout: 7000 });
     const entered = await page.evaluate(() => [document.querySelector("nav button[aria-current=page]").dataset.mode, document.activeElement.classList.contains("knob") ? "knob" : document.activeElement.className]);
     check("Eman: keyboard: Enter on the knob opens the pill on the current view, arrows turn it (RTL), Enter picks, focus returns to the knob", focused === "learn" && centred === "list" && entered[0] === "list" && entered[1] === "knob", { focused, centred, entered });
+    // Vertical dock (option in the look group): the knob drives up to the middle of the right edge, the pill grows up and down,
+    // a vertical swipe turns the views, and the knob comes back down to the corner
+    await tab(page, "settings"); await page.check("#dkv");
+    await page.waitForFunction(() => !document.querySelector(".knob").classList.contains("mid")); await sleep(800);
+    const knobXY = () => page.evaluate(() => { const r = document.querySelector(".knob").getBoundingClientRect(); return { right: Math.round(innerWidth - r.right), cy: Math.round(r.top + r.height / 2), bottomGap: Math.round(innerHeight - r.bottom) }; });
+    const vCorner = { ...(await knobXY()), vertical: await page.evaluate(() => document.body.classList.contains("dock-v")) };
+    await page.click(".knob"); await page.waitForFunction(() => document.querySelector("nav").classList.contains("open"), null, { timeout: 3000 });
+    const vMid = await knobXY(); await sleep(900);
+    const vPill = await page.evaluate(() => { const r = document.querySelector("nav").getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height), cy: Math.round(r.top + r.height / 2), right: Math.round(innerWidth - r.right), stacked: [...document.querySelectorAll("nav button")].every(b => /translate\(-?[\d.]+px, -?[\d.]+px\)/.test(b.style.transform)) }; });
+    const vb = await (await page.$("nav")).boundingBox(), vx = vb.x + vb.width / 2, vy = vb.y + vb.height / 2;
+    await page.mouse.move(vx, vy); await page.mouse.down();
+    for (let i = 1; i <= 9; i++) { await page.mouse.move(vx, vy + i * 8); await sleep(40); }
+    await sleep(120); await page.mouse.up();
+    await page.waitForFunction(() => document.querySelector("nav button[aria-current=page]").dataset.mode === "practice", null, { timeout: 3000 }).catch(() => {});
+    const vMode = await page.evaluate(() => document.querySelector("nav button[aria-current=page]").dataset.mode);
+    await page.waitForFunction(() => !document.querySelector("nav").classList.contains("open"), null, { timeout: 7000 });
+    await sleep(1500); const vBack = await knobXY();
+    check("Eman: vertical dock: the knob rests in the corner, drives to the middle of the right edge, the pill grows up and down round it, a swipe down turns to the previous view, the knob comes back down", vCorner.vertical && vCorner.right <= 24 && vCorner.bottomGap <= 30 && vMid.right <= 24 && Math.abs(vMid.cy - 422) <= 3 && vPill.h > 300 && vPill.w <= 90 && Math.abs(vPill.cy - 422) <= 3 && vPill.right <= 20 && vMode === "practice" && vBack.right === vCorner.right && vBack.cy === vCorner.cy, { vCorner, vMid, vPill, vMode, vBack });
+    await tab(page, "settings"); await page.uncheck("#dkv"); await sleep(100);
     await tab(page, "learn");
 
     // Learn: front, flip animation, back with tr + family chips + topic
@@ -501,12 +525,11 @@ const toastOf = async (page, action) => {
     const reads = gh.log.filter(e => e.method === "GET" && e.path.endsWith("/cards.js")), lastRead = reads[reads.length - 1];
     check("GitHub: an unchanged cards.js is asked for with its ETag and answered with 304, not downloaded again", reads.length >= 2 && !!lastRead.inm && lastRead.status === 304, reads.map(e => [e.inm, e.status]));
 
-    // Phrases list: separate from the word list, starter set from Gemini
+    // Phrases: their own tab next to the words, starter set from Gemini
     await tab(page, "list");
-    const seg = await page.$$eval(".seg button", els => els.map(e => e.textContent.trim()));
-    const wordRows = await page.$$eval(".list li", els => els.length);
-    check("Eman: list has Arabic switch words/phrases, words list without the phrase", JSON.stringify(seg) === JSON.stringify(["الكلمات 54", "العبارات 1"]) && wordRows === 54 && !(await page.$('[data-id="mirwirklichzuhoch"]')), { seg, wordRows });
-    await page.click('[data-act="lk"][data-k="p"]');
+    const wordRows = await page.$$eval(".list li", els => els.length), seg = await page.$(".seg");
+    check("Eman: the words tab has no words/phrases switch and lists the words without the phrase", !seg && wordRows === 54 && !(await page.$('[data-id="mirwirklichzuhoch"]')), { seg: !!seg, wordRows });
+    await tab(page, "phrases");
     const phView = await page.evaluate(() => ({ groups: [...document.querySelectorAll(".topic h3 span:first-child")].map(e => e.textContent), rows: document.querySelectorAll(".list li.ph").length, starter: !!document.querySelector('[data-act="pstart"]'), addPh: document.querySelector("#np").placeholder }));
     check("Eman: phrases view shows the phrase in its Arabic group and offers the starter set", JSON.stringify(phView.groups) === '["إبداء الرأي"]' && phView.rows === 1 && phView.starter && phView.addPh === "بالألماني أو العربي أو الإنجليزي", phView);
     await grab(page, "phrases-list");

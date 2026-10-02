@@ -17,7 +17,7 @@ header h1{font-size:2rem;margin:0;font-weight:800;letter-spacing:-.02em}
 .new{display:inline-block;margin-inline-start:6px;padding:1px 9px;border-radius:999px;background:var(--glass-strong);border:1px solid var(--rim);color:var(--ink);font-size:.72rem;font-weight:600}
 
 /* Glasfläche */
-.card,.btn,.list li,nav,.add,#toast,.fld input,.fld textarea,.fld select,.addrow input{
+.card,.btn,.list li,nav,.add,.grp,#toast,.fld input,.fld textarea,.fld select,.addrow input{
   background:var(--glass);border:1px solid var(--rim);
   -webkit-backdrop-filter:blur(24px) saturate(170%);backdrop-filter:blur(24px) saturate(170%);
   box-shadow:inset 0 1px 0 var(--shine),0 10px 30px -12px var(--shadow)}
@@ -80,11 +80,15 @@ button:focus-visible,.btn:focus-within,.card:focus-visible{outline:3px solid var
 .lvl{display:flex;gap:4px;flex:none}
 .lvl i{width:7px;height:7px;border-radius:50%;background:var(--rim)}
 .lvl i.on{background:var(--ok);box-shadow:0 0 6px var(--ok)}
-.detail{padding:0 14px 14px;padding-inline-start:32px;display:flex;flex-direction:column;gap:8px}
+.detail{padding:0 14px 14px;padding-inline-start:32px;display:flex;flex-direction:column;gap:8px;animation:wipe .35s cubic-bezier(.22,1,.36,1)}
+/* Die aufgeklappte Karte wischt von oben herunter; ohne animierbares clip-path bleibt das Einblenden mit dem kleinen Rutsch */
+@keyframes wipe{from{-webkit-clip-path:inset(0 0 100% 0);clip-path:inset(0 0 100% 0);opacity:0;transform:translateY(-6px)}to{-webkit-clip-path:inset(0);clip-path:inset(0);opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.detail{animation:none}}
 
-/* Einstellungen */
-.settings h2{font-size:.8rem;font-weight:600;color:var(--muted);margin:24px 8px 8px}
-.settings h2:first-child{margin-top:4px}
+/* Einstellungen: vier Gruppen als Glasfelder, darin die Abschnitte */
+.grp{border-radius:24px;padding:6px 14px 14px;margin-bottom:16px}
+.settings .gh{font-size:1.05rem;font-weight:800;margin:8px 8px 4px}
+.settings h3{font-size:.8rem;font-weight:600;color:var(--muted);margin:22px 8px 8px}
 .settings p{margin:6px 8px}
 .fld{display:flex;flex-direction:column;gap:8px;margin:10px 0;font-size:.92rem}
 .fld.inline{flex-direction:row;align-items:center;justify-content:space-between;padding:0 8px}
@@ -124,6 +128,7 @@ nav button svg{width:26px;height:26px}
 nav button.on{color:var(--accent)}
 /* Der Text liegt außerhalb des Flusses, damit das Symbol in der Mitte der Pille sitzt; das Dock blendet ihn mit dem Abstand zur Mitte ein */
 nav button .lbl{position:absolute;left:0;right:0;top:calc(50% + 12px);text-align:center;opacity:0}
+nav:not(.open) .lbl{transition:opacity .15s}
 nav button:focus-visible{outline:3px solid var(--accent);outline-offset:-3px;border-radius:22px}
 /* Die Pille schneidet ihre Ränder ab: die Zahl sitzt auf der Schulter des Symbols (auch wenn es in der Mitte angehoben und vergrößert ist), nicht darüber */
 #badge{position:absolute;top:calc(50% - 20px);inset-inline-start:calc(50% + 10px);background:var(--again);color:#fff;border-radius:999px;font-size:.62rem;padding:0 6px;line-height:1.5;font-weight:700}
@@ -139,7 +144,17 @@ nav button:focus-visible{outline:3px solid var(--accent);outline-offset:-3px;bor
 .knob:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 /* Offen ist der Knopf sofort weg (die Pille steht an seiner Stelle); beim Schließen blendet er unter der fallenden Pille wieder ein */
 body.dock-open .knob{opacity:0;pointer-events:none;transition:opacity 0s}
-@media (prefers-reduced-motion:reduce){nav,.knob,nav.rising button,nav.rising .lbl{transition:none}}
+/* Senkrechtes Dock (Option dockV): der Knopf fährt aus der Ecke hoch zur Mitte des rechten Rands (--ky), die Pille wächst dort
+   nach oben und unten, die Knöpfe stehen übereinander (das Dock setzt die Achse), die Linse liegt quer */
+body.dock-v .knob{left:auto;right:18px;margin-left:0;bottom:calc(50% - 29px);--ky:calc(50vh - 29px - max(22px,calc(env(safe-area-inset-bottom,0px) + 10px)));transform:translateY(var(--ky))}
+body.dock-v .knob.mid{transform:none}
+body.dock-v nav{left:auto;right:18px;margin:0;bottom:calc(50% - 29px);transition:width .7s cubic-bezier(.22,1,.36,1),height .7s cubic-bezier(.22,1,.36,1),bottom .7s cubic-bezier(.22,1,.36,1),right .7s cubic-bezier(.22,1,.36,1),opacity .25s .45s}
+body.dock-v nav.open{width:80px;height:min(94vh,380px);right:7px;bottom:calc(50% - min(47vh,190px));transition:width .7s cubic-bezier(.22,1,.36,1),height .7s cubic-bezier(.22,1,.36,1),bottom .7s cubic-bezier(.22,1,.36,1),right .7s cubic-bezier(.22,1,.36,1),opacity 0s}
+body.dock-v nav::before{top:50%;bottom:auto;left:4px;right:4px;width:auto;height:88px;margin:-44px 0 0}
+body.dock-v nav button{top:50%;left:0;width:100%;height:76px;margin:-38px 0 0}
+/* In der schmalen Pille sitzt die Zahl über dem Symbol statt auf seiner Schulter, sonst schneidet der Rand sie ab */
+body.dock-v #badge,body.dock-v .knob .kbadge{top:calc(50% - 30px);inset-inline-start:calc(50% + 2px)}
+@media (prefers-reduced-motion:reduce){nav,.knob,nav.rising button,nav.rising .lbl,nav:not(.open) .lbl{transition:none}}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + max(10px,calc(env(safe-area-inset-bottom,0px) - 14px)));color:var(--ink);padding:11px 16px;border-radius:16px;font-size:.9rem;z-index:6;max-width:90%}
 @media (prefers-reduced-motion:reduce){.btn{transition:none}}
 
@@ -185,11 +200,6 @@ body.dock-open .knob{opacity:0;pointer-events:none;transition:opacity 0s}
 .tcount{font-size:.75rem;font-weight:600;color:var(--muted);background:var(--glass-strong);border:1px solid var(--rim);border-radius:999px;padding:1px 9px}
 
 /* Wörter / Wendungen umschalten */
-.seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;margin-bottom:14px;border-radius:18px;background:var(--glass);border:1px solid var(--rim);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px)}
-.seg button{all:unset;box-sizing:border-box;text-align:center;padding:10px 8px;border-radius:14px;font-weight:600;font-size:.92rem;color:var(--muted);cursor:pointer}
-.seg button[aria-pressed=true]{background:var(--glass-strong);color:var(--ink);box-shadow:inset 0 1px 0 var(--shine)}
-.seg button:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
-.segn{font-weight:500;opacity:.7;font-size:.8rem}
 .starter{margin-top:12px}
 .starter p{margin:0 4px}
 /* Wendungen sind länger als Wörter */
