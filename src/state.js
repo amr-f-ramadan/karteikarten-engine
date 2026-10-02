@@ -6,7 +6,7 @@ export function createState(P) {
     gkey: "",
     mode: "learn",
     learn: { queue: [], cur: null, flipped: false, turning: false },
-    quiz: null,
+    quiz: null, asked: [], // die zuletzt gefragten Nomen (ids), damit das Quiz sie nicht gleich wieder zeigt
     list: { open: null, kind: "w", query: "", closed: { w: null, p: null } },
     add: { word: "", busy: false, card: null, msg: "" },
     pad: { word: "", busy: false, card: null, msg: "" },

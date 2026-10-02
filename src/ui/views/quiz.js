@@ -1,18 +1,17 @@
-// Artikel-Quiz: Nomen, die oft falsch waren, kommen häufiger; nach der Antwort wird das Wort gesprochen.
+// Artikel-Quiz: Nomen, die oft falsch waren, kommen häufiger, zuletzt gezeigte nicht gleich wieder (core/quiz);
+// nach der Antwort wird das Wort gesprochen.
 import { esc, ART, fullWord, gClass } from "../../core/text.js";
+import { RECENT, pickNoun } from "../../core/quiz.js";
 import { $ } from "../dom.js";
 import { sayT, arLine } from "../parts.js";
 
 export function createQuizView(ctx) {
   const { S, T, store, voice } = ctx;
   function pick() {
-    const nouns = store.nouns;
-    if (!nouns.length) { S.quiz = null; return; }
-    const w = nouns.map(c => { const a = S.P.art[c.id]; return 1 + (a ? a.w * 3 - a.ok * 0.5 : 2); }).map(x => Math.max(0.3, x));
-    let r = Math.random() * w.reduce((a, b) => a + b, 0), i = 0;
-    while (r > w[i]) { r -= w[i]; i++; }
-    const c = nouns[Math.min(i, nouns.length - 1)];
-    S.quiz = { c: S.quiz && S.quiz.c === c && nouns.length > 1 ? nouns[(i + 1) % nouns.length] : c, picked: null };
+    const c = pickNoun(store.nouns, S.P.art, S.asked);
+    if (!c) { S.quiz = null; return; }
+    S.asked = S.asked.concat(c.id).slice(-RECENT);
+    S.quiz = { c, picked: null };
   }
   function answer(g) {
     const q = S.quiz;

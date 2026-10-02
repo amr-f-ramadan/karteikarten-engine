@@ -54,6 +54,7 @@ src/
     store.js     CardStore: words/phrases/nouns, byId, byFam, byTopic, search text; invalidated on change
     prompt.js    prompt + schema builders for cards, phrases, starter set, practice
     diff.js      tokens, diffHTML (corrections)
+    quiz.js      pickNoun: article quiz choice, weighted by answers, the last RECENT nouns skipped
   services/    browser I/O, no rendering
     github.js    contents API with ETag/304, progress push/pull, cards.js append/remove, branch creation
     gemini.js    generateContent with model fallback, voice generation

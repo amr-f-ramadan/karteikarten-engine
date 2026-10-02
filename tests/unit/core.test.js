@@ -10,6 +10,7 @@ import { diffHTML } from "../../src/core/diff.js";
 import { parseCards, serializeCards, appendCards } from "../../src/core/cardsfile.js";
 import { freeId, shapeCard } from "../../src/core/newcard.js";
 import { nearestTurn, settleTarget, glideDuration } from "../../src/core/dock.js";
+import { RECENT, nounWeight, pickNoun } from "../../src/core/quiz.js";
 
 const DAY = 864e5, day = "2026-10-01";
 const cards = () => [
@@ -167,4 +168,22 @@ test("progress: done waitlist entries older than 30 days are pruned", () => {
   P.pending = { old: { w: "old", t: now - 31 * 864e5, done: true }, fresh: { w: "fresh", t: now - 29 * 864e5, done: true }, open: { w: "open", t: now - 90 * 864e5 } };
   prune(P, now);
   assert.deepEqual(Object.keys(P.pending), ["fresh", "open"]);
+});
+
+test("quiz: weights follow the answers, the last shown nouns are skipped", () => {
+  assert.equal(nounWeight(undefined), 3, "never asked");
+  assert.equal(nounWeight({ ok: 0, w: 2 }), 7, "wrong twice");
+  assert.equal(nounWeight({ ok: 6, w: 0 }), 0.3, "well known: never below 0.3");
+  const nouns = Array.from({ length: 12 }, (_, i) => ({ id: "n" + i, g: "der" }));
+  assert.equal(pickNoun(nouns, {}, ["n0", "n1"], () => 0).id, "n2", "the first noun not shown lately");
+  assert.equal(pickNoun(nouns, {}, [], () => 0.999999).id, "n11", "the draw never runs past the last noun");
+  assert.equal(pickNoun([nouns[0]], {}, ["n0"]).id, "n0", "a single noun is always asked");
+  assert.equal(pickNoun(nouns.slice(0, 3), {}, ["n0", "n1", "n2"], () => 0).id, "n0", "with three nouns only the last two shown are skipped");
+  assert.equal(pickNoun([], {}, []), null);
+  const art = { n3: { ok: 0, w: 5 } };
+  assert.equal(pickNoun(nouns, art, [], () => 0.5).id, "n3", "a noun wrong five times (weight 16) takes half the range");
+  const shown = []; let seed = 7;
+  const rnd = () => { seed = (seed * 48271) % 2147483647; return seed / 2147483647; };
+  for (let i = 0; i < 200; i++) { shown.push(pickNoun(nouns, {}, shown, rnd).id); }
+  assert.ok(shown.every((id, i) => !shown.slice(Math.max(0, i - RECENT), i).includes(id)), "no noun comes back within eight picks");
 });
