@@ -272,9 +272,15 @@ const toastOf = async (page, action) => {
     await page.waitForFunction(() => document.querySelector("nav").classList.contains("open"), null, { timeout: 3000 });
     const openedAfter = Date.now() - t0, arrived = await knobX();
     check("Eman: the closed knob sits in the bottom right corner (in RTL too), drives to the middle for 0.6 s and only then does the pill rise", corner.right <= 24 && halfway.right > corner.right + 5 && halfway.mid > 15 && !halfway.open && openedAfter >= 500 && openedAfter < 2000 && Math.abs(arrived.mid) <= 2, { corner, halfway, openedAfter, arrived });
-    await page.keyboard.press("Escape");
+    // The pill grows out of the knob to both sides and falls back into it: while it opens and while it closes it is narrower
+    // than the full pill, centred on the knob, and still visible
+    const pillAt = () => page.evaluate(() => { const n = document.querySelector("nav"), r = n.getBoundingClientRect(), k = document.querySelector(".knob").getBoundingClientRect(); return { w: Math.round(r.width), off: Math.round(r.left + r.width / 2 - (k.left + k.width / 2)), op: +getComputedStyle(n).opacity }; });
+    await sleep(100); const growing = await pillAt();
+    await sleep(900); const grown = await pillAt();
+    await page.keyboard.press("Escape"); await sleep(300); const falling = await pillAt();
+    check("Eman: the pill grows out of the knob to both sides and falls back into it", growing.w > 58 && growing.w < grown.w && Math.abs(growing.off) <= 2 && growing.op > 0 && grown.w >= 300 && falling.w < grown.w && falling.w > 58 && Math.abs(falling.off) <= 2 && falling.op > 0.5, { growing, grown, falling });
     await page.waitForFunction(() => !document.querySelector("nav").classList.contains("open"), null, { timeout: 3000 });
-    await sleep(500); const afterSink = await knobX(); // the pill is still sinking: the knob waits in the middle
+    await sleep(200); const afterSink = await knobX(); // the pill is still falling into the knob: it waits in the middle
     await sleep(1100); const returned = await knobX();
     check("Eman: after the pill has sunk the knob drives back to its corner in 0.6 s", Math.abs(afterSink.mid) <= 2 && returned.right === corner.right, { afterSink, returned, corner });
     await openDock();

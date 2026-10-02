@@ -94,6 +94,9 @@ as the bar does today.
 - Rise and sink take 0.7 s with a softer ease (knob 0.7 s too).
 - The knob shows the due count only while it shows the view whose button holds `#badge` (learn); on the other views
   the knob is plain.
+- The pill no longer rises from below: closed it has the knob's size and place; it grows out of the knob to both sides
+  (width, height and bottom, 0.7 s, the same ease), the buttons appearing from behind its edge, and on closing it falls
+  back into the knob and only then fades (opacity delayed 0.45 s). Then the knob drives back to its corner.
 - The knob lives in the bottom right corner in both apps (in RTL too: the thumb is the same), 18 px from the edge. A tap drives it to the middle (0.6 s, `transform`, the same ease as the pill), and only then does the pill
   rise as before. After the pill has sunk (0.7 s) the knob drives back to its corner (0.6 s). A second tap while it is on
   its way is ignored; a tap during the way back turns it round. Under reduced motion it jumps.

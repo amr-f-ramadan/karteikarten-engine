@@ -103,11 +103,14 @@ button:focus-visible,.btn:focus-within,.card:focus-visible{outline:3px solid var
 .done .big{font-size:1.5rem;font-weight:800;margin:0 0 6px}
 .done p{color:var(--muted)}
 
-/* Dock: die Tab-Leiste ist eine Pille, die aus dem Knopf unten in der Mitte aufsteigt; die Knöpfe werden vom Dock
-   Bild für Bild verschoben (transform), die Linse ist nav::before. touch-action none: der Browser nimmt die Geste nicht. */
-nav{position:fixed;left:0;right:0;margin:0 auto;bottom:max(16px,calc(env(safe-area-inset-bottom,0px) + 4px));width:min(94%,380px);height:80px;border-radius:40px;overflow:hidden;z-index:5;touch-action:none;
-  transform:translateY(120px);opacity:0;pointer-events:none;transition:transform .7s cubic-bezier(.22,1,.36,1),opacity .5s}
-nav.open{transform:none;opacity:1;pointer-events:auto}
+/* Dock: die Tab-Leiste ist eine Pille, die aus dem Knopf in der Mitte nach beiden Seiten herauswächst (geschlossen hat sie
+   seine Größe und seinen Platz; die Knöpfe sitzen an ihrer Mitte und tauchen hinter dem Rand auf) und beim Schließen wieder in
+   ihn hineinfällt, erst dann blendet sie aus. Die Knöpfe werden vom Dock Bild für Bild verschoben (transform), die Linse ist
+   nav::before. touch-action none: der Browser nimmt die Geste nicht. */
+nav{position:fixed;left:0;right:0;margin:0 auto;bottom:max(22px,calc(env(safe-area-inset-bottom,0px) + 10px));width:58px;height:58px;border-radius:40px;overflow:hidden;z-index:5;touch-action:none;
+  opacity:0;pointer-events:none;transition:width .7s cubic-bezier(.22,1,.36,1),height .7s cubic-bezier(.22,1,.36,1),bottom .7s cubic-bezier(.22,1,.36,1),opacity .25s .45s}
+nav.open{width:min(94%,380px);height:80px;bottom:max(16px,calc(env(safe-area-inset-bottom,0px) + 4px));opacity:1;pointer-events:auto;
+  transition:width .7s cubic-bezier(.22,1,.36,1),height .7s cubic-bezier(.22,1,.36,1),bottom .7s cubic-bezier(.22,1,.36,1),opacity .2s}
 nav::before{content:"";position:absolute;top:4px;bottom:4px;left:50%;width:88px;margin-left:-44px;border-radius:999px;pointer-events:none;
   background:radial-gradient(circle at 50% 30%,color-mix(in srgb,var(--accent) 30%,transparent),transparent 72%),var(--glass-strong);box-shadow:inset 0 1px 0 var(--shine),0 6px 18px -8px var(--shadow)}
 nav button{all:unset;cursor:pointer;position:absolute;top:0;height:100%;left:50%;width:76px;margin-left:-38px;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:600;color:var(--muted);white-space:nowrap;will-change:transform;-webkit-tap-highlight-color:transparent}
