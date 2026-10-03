@@ -12,7 +12,7 @@ export function shapeCard(c, { id, fields, newCat, store, src }) {
   if (fields.includes("def")) o.def = c.def || "";
   o.ex = c.ex; if (c.tr) o.tr = c.tr;
   // syn und forms stehen auch leer in der Karte: so ist zu sehen, dass sie schon erfragt wurden
-  if (fields.includes("syn")) o.syn = (c.syn || "").trim();
+  if (fields.includes("syn")) o.syn = cleanSyn(c.syn, c.w);
   if (fields.includes("forms")) o.forms = cleanForms(c.forms, fields.includes("en"), c.w);
   if (c.perf) o.perf = c.perf; if (c.note) o.note = c.note; if (src) o.src = src;
   // Familie nur, wenn ihr Stamm im Wort steckt; ein eigenes Wort als Familie nur, wenn es die Familie schon gibt
@@ -22,11 +22,26 @@ export function shapeCard(c, { id, fields, newCat, store, src }) {
   return o;
 }
 
-/* Wortformen aus einer Antwort: nur vollständige, ohne das Wort selbst, ohne Doppelte; en nur, wenn die App es hat */
+/* Gemini schreibt manchmal seine Überlegungen in ein Feld ("…, Kommentar oder Notiz passt ebenso gut …"): ein Synonym ist kurz
+   (höchstens vier Wörter, 32 Zeichen, kein Satzzeichen), nicht das Wort selbst; höchstens zwei, ohne Doppelte */
+const ARTICLE = /^((der|die|das)\s+)+/i;
+const isShortTerm = s => s.length > 0 && s.length <= 32 && s.split(/\s+/).length <= 4 && !/[.;:!?()]/.test(s) && /\p{L}/u.test(s);
+export function cleanSyn(syn, self = "") {
+  const own = String(self).toLowerCase().replace(ARTICLE, ""), out = [];
+  for (const s of String(syn || "").split(",").map(x => x.trim())) {
+    if (!isShortTerm(s)) continue;
+    const k = s.toLowerCase().replace(ARTICLE, "");
+    if (k === own || out.some(x => x.toLowerCase().replace(ARTICLE, "") === k)) continue;
+    out.push(s); if (out.length === 2) break;
+  }
+  return out.join(", ");
+}
+/* Wortformen aus einer Antwort: nur vollständige, ohne das Wort selbst, ohne Doppelte, ohne doppelten Artikel ("die die …");
+   en nur, wenn die App es hat */
 export function cleanForms(list, withEnField, self = "") {
   const seen = new Set([self.toLowerCase()]), out = [];
   for (const f of Array.isArray(list) ? list : []) {
-    const w = (f && f.w || "").trim(); if (!w || seen.has(w.toLowerCase()) || !f.ar) continue;
+    const w = (f && f.w || "").trim().replace(ARTICLE, ""); if (!isShortTerm(w) || /,/.test(w) || seen.has(w.toLowerCase()) || !f.ar) continue;
     seen.add(w.toLowerCase());
     const o = { w, g: ["der", "die", "das", "pl"].includes(f.g) ? f.g : "x", pos: ["n", "v", "adj", "adv"].includes(f.pos) ? f.pos : guessPos(w, f.g), ar: f.ar };
     if (withEnField) o.en = f.en || "";

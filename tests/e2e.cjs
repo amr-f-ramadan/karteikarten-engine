@@ -783,12 +783,14 @@ const toastOf = async (page, action) => {
     const freeOf = () => page.waitForFunction(() => !document.body.classList.contains("hold"), null, { timeout: 15000 });
     await freeOf(); // a hold from an earlier step would swallow the tap below
     const qWord = await page.textContent(".card.quiz .word");
-    gem.ttsDelay = 1500;
+    // The voice takes 4 s: the blocked tap must land while it is still being made, so nothing slow (the screenshot) runs before it;
+    // with 1.5 s a slow runner's screenshot outlasted the wait, the tap went through and the next step found no "next" button
+    gem.ttsDelay = 4000;
     await page.click('.arts [data-g="der"]'); await page.waitForSelector(".arts .right", { timeout: 5000 }); await sleep(300);
     const qHold = await page.evaluate(() => ({ hold: document.body.classList.contains("hold"), ring: !!document.querySelector(".card.quiz .say.loading"), dim: getComputedStyle(document.querySelector('[data-act="nextq"]')).opacity }));
-    await page.screenshot({ path: SHOTS + "/voice-quiz-hold.png", clip: { x: 0, y: 60, width: 390, height: 560 } });
     await clickOrDiagnose(page, '[data-act="nextq"]'); await sleep(100);
     const qSame = (await page.textContent(".card.quiz .word")).includes(qWord.replace("___", "").trim());
+    await page.screenshot({ path: SHOTS + "/voice-quiz-hold.png", clip: { x: 0, y: 60, width: 390, height: 560 } });
     await freeOf(); gem.ttsDelay = 0;
     const qFree = await page.evaluate(() => !document.body.classList.contains("hold") && !document.querySelector(".loading"));
     await clickOrDiagnose(page, '[data-act="nextq"]'); await sleep(200);
