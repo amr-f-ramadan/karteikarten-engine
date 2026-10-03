@@ -26,6 +26,8 @@ export const meaningBig = (c, mode) => (mode === "en" && c.en ? `<p class="en-bi
   : `<p class="ar-big">${esc(c.ar)}</p>${mode === "both" && c.en ? `<p class="en-big sub" lang="en" dir="ltr">${esc(c.en)}</p>` : ""}`);
 export const trLine = tr => (tr ? `<p class="tr" lang="ar" dir="rtl">${esc(tr)}</p>` : "");
 export const noteBox = note => (note ? `<p class="note">${note}</p>` : "");
+/* Der Knopf für das einmalige Ergänzen (Einstellungen und Wörterliste): n Karten, busy während Gemini arbeitet */
+export const fillButton = (n, busy, T) => (n ? `<button class="btn wide fillbtn" data-act="fillen" ${busy ? "disabled" : ""}>${busy ? T("fillBusy") : T("fill").replace("{n}", n)}</button>` : "");
 /* Synonyme als Chips: ein Wort, das in der Liste ist, bekommt die Aktion act (goto öffnet seine Karte, sayt spricht es); ein fremdes wird nur gesprochen */
 export const synRow = (c, store, T, act) => {
   const items = (c.syn || "").split(",").map(s => s.trim()).filter(Boolean);

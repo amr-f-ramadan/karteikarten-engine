@@ -26,6 +26,7 @@ export function createRouter(ctx) {
   /* Ansicht wechseln: der eine Weg für Tab-Leiste und Dock */
   function go(mode) {
     S.mode = mode; const v = views[mode]; if (v && v.enter) v.enter();
+    parts.forEach(p => { if (p.leave) p.leave(); }); // ein Teil über den Ansichten (das Eingabeblatt) schließt beim Wechsel
     render(); window.scrollTo(0, 0);
   }
 

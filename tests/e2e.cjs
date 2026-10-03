@@ -229,7 +229,8 @@ const toastOf = async (page, action) => {
     // English meaning: option in the learning group, both meanings, synonyms and forms on the opened card; the one-time fill for
     // the old cards asks Gemini in batches (mocked per batch), rewrites cards.js with en, syn and forms and merges the families
     await page.selectOption("#mlang", "both"); await sleep(100);
-    await tab(page, "list"); await page.click('[data-act="open"][data-id="kuendigung"]'); await sleep(450);
+    await tab(page, "list"); const listFillBefore = await page.$eval('#main [data-act="fillen"]', e => e.textContent).catch(() => null);
+    await page.click('[data-act="open"][data-id="kuendigung"]'); await sleep(450);
     const meaning = await page.evaluate(() => ({ ar: (document.querySelector(".detail .ar") || {}).textContent, en: (document.querySelector(".detail .en") || {}).textContent, syn: [...document.querySelectorAll(".detail .syn .famchip")].map(e => e.textContent), forms: [...document.querySelectorAll(".detail .form")].map(e => e.textContent.replace(/\s+/g, " ").trim()) }));
     await tab(page, "settings");
     const fillBtn = await page.$('[data-act="fillen"]'), fillText = fillBtn ? await fillBtn.textContent() : null;
@@ -238,10 +239,11 @@ const toastOf = async (page, action) => {
     const fillToast = await toastOf(page, () => page.click('[data-act="fillen"]'));
     const fillPut = gh.log.filter(e => e.method === "PUT" && e.path.endsWith("/cards.js")).pop(), filled = fillPut ? unb64(fillPut.body.content) : "";
     const fillCalls = gem.calls.filter(c => c.body.contents[0].parts[0].text.includes("gib ihre id unverändert zurück")).map(c => (c.body.contents[0].parts[0].text.match(/"id":"/g) || []).length);
-    await tab(page, "list"); await page.click('[data-act="open"][data-id="empfinden"]'); await sleep(450);
+    await tab(page, "list"); const listFillAfter = !!(await page.$('#main [data-act="fillen"]'));
+    await page.click('[data-act="open"][data-id="empfinden"]'); await sleep(450);
     const merged = await page.evaluate(() => ({ en: (document.querySelector(".detail .en") || {}).textContent, forms: [...document.querySelectorAll(".detail .form")].map(e => e.textContent.replace(/\s+/g, " ").trim()), syn: document.querySelectorAll(".detail .syn .famchip").length, rows: document.querySelectorAll('.row[data-id="empfindlich"], .row[data-id="empfindung"]').length }));
     const errors = page.errors; await ctx.close();
-    return { run, errors, label, phraseAdd, kindTag, english: { meaning, fillText, fillToast, filled, fillCalls, merged } };
+    return { run, errors, label, phraseAdd, kindTag, english: { meaning, fillText, fillToast, filled, fillCalls, merged, listFillBefore, listFillAfter } };
   };
   const hash = run => require("crypto").createHash("sha256").update(JSON.stringify(run)).digest("hex");
   if (CAPTURE) { const { run } = await runAmr("amr-capture"); fs.writeFileSync(FIX + "/amr-expected.sha256", hash(run) + "\n"); console.log("captured tests/fixtures/amr-expected.sha256"); }
@@ -262,6 +264,7 @@ const toastOf = async (page, action) => {
   const phrFilled = amrPhr.every(c => { const f = filledById.get(c.id); return f && f.en === "EN " + c.id && !("syn" in f) && !("forms" in f); });
   const mergedOk = bases.every((b, i) => { const f = filledById.get(b.id); return f && multi[i][1].filter(c => c !== b).every(c => f.forms.some(x => x.w === c.w)); }) && removedIds.every(id => !filledById.has(id));
   check("Amr: the one-time fill names all cards it touches, asks words in tens and phrases in twenties, writes en, syn and forms into every word line (en after ar), only en into phrases, and merges the families", en.fillText === `Karten ergänzen: Englisch, Synonyme, Wortformen, Familien zusammenlegen (${expectN})` && en.fillToast === `${expectN} Karten ergänzt` && JSON.stringify(en.fillCalls) === JSON.stringify([...Array(Math.ceil(amrWords.length / 10)).keys()].map(i => Math.min(10, amrWords.length - i * 10)).concat([...Array(Math.ceil(amrPhr.length / 20)).keys()].map(i => Math.min(20, amrPhr.length - i * 20)))) && wordsFilled && phrFilled && multi.length >= 1 && mergedOk, { fillText: en.fillText, fillToast: en.fillToast, fillCalls: en.fillCalls, expectN, wordsFilled, phrFilled, families: multi.length, mergedOk });
+  check("Amr: the word list offers the same fill button while old cards need it, and no longer after the fill", en.listFillBefore === en.fillText && !en.listFillAfter, { before: en.listFillBefore, after: en.listFillAfter });
   check("Amr: after the fill the merged family card shows its English, its forms (Empfindung, empfindlich among them) and a synonym chip, the merged cards are gone from the list", /^EN /.test(en.merged.en) && en.merged.forms.some(f => /Empfindung/.test(f)) && en.merged.forms.some(f => /empfindlich/.test(f)) && en.merged.syn === 1 && en.merged.rows === 0, en.merged);
   if (process.env.DUMP_RUN) fs.writeFileSync(process.env.DUMP_RUN, JSON.stringify(got, null, 1));
   check("Amr: Gemini request, add form, article labels and saved card exactly as with his original engine", hash(got) === want, { formIds: got.formIds, savedLine: got.savedLine, promptStart: got.request && got.request.contents[0].parts[0].text.slice(0, 200) });
@@ -516,7 +519,12 @@ const toastOf = async (page, action) => {
     check("Eman: waitlist entry stored in progress.pending", pend && pend["miete"] && pend["miete"].w === "die Miete", pend);
     await page.click('[data-act="unq"]');
     check("Eman: waitlist chip can be removed", !(await page.$(".wait .chip")));
-    gem.mode = "ok"; await page.click('[data-act="addclose"]');
+    gem.mode = "ok";
+    await page.fill("#nw", "Entwurf"); await page.dispatchEvent("#nw", "input");
+    await tab(page, "quiz"); const sheetAfterGo = await page.evaluate(() => document.querySelector("#sheet").hidden);
+    await tab(page, "list"); await page.click('[data-act="addopen"]'); await sleep(150);
+    check("Eman: changing the view closes the add sheet, reopening it shows the sheet again", sheetAfterGo && !(await page.evaluate(() => document.querySelector("#sheet").hidden)), { sheetAfterGo });
+    await page.fill("#nw", ""); await page.click('[data-act="addclose"]');
 
     // Delete a card
     await page.click('[data-act="open"][data-id="umziehen"]');
