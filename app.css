@@ -115,7 +115,9 @@ button:focus-visible,.btn:focus-within,.card:focus-visible{outline:3px solid var
    seine Größe und seinen Platz; die Knöpfe sitzen an ihrer Mitte und tauchen hinter dem Rand auf) und beim Schließen wieder in
    ihn hineinfällt, erst dann blendet sie aus. Die Knöpfe werden vom Dock Bild für Bild verschoben (transform), die Linse ist
    nav::before. touch-action none: der Browser nimmt die Geste nicht. */
-nav{position:fixed;left:0;right:0;margin:0 auto;bottom:max(22px,calc(env(safe-area-inset-bottom,0px) + 10px));width:58px;height:58px;border-radius:40px;overflow:hidden;z-index:5;touch-action:none;
+/* translateZ(0): eine eigene Ebene, sonst malt Safari das feste Element beim Scrollen manchmal in die scrollende Seite, und es wandert
+   mit dem Inhalt nach oben (die Pille "steigt" beim Runterscrollen); der Knopf hat seine Ebene schon durch sein transform */
+nav{position:fixed;left:0;right:0;margin:0 auto;transform:translateZ(0);-webkit-backface-visibility:hidden;bottom:max(22px,calc(env(safe-area-inset-bottom,0px) + 10px));width:58px;height:58px;border-radius:40px;overflow:hidden;z-index:5;touch-action:none;
   opacity:0;pointer-events:none;transition:width .7s cubic-bezier(.22,1,.36,1),height .7s cubic-bezier(.22,1,.36,1),bottom .7s cubic-bezier(.22,1,.36,1),opacity .25s .45s}
 /* Beim Öffnen erscheint die Pille sofort (sie hat da genau die Größe und das Aussehen des Knopfs, der im selben Bild verschwindet):
    zwei Glasschichten übereinander würden kurz flackern */
@@ -204,11 +206,11 @@ body.dock-v nav button{top:50%;left:0;width:100%;height:76px;margin:-38px 0 0}
 .form .pos{font-family:var(--ui);font-size:.72rem;font-weight:600;color:var(--muted);min-width:4.2em}
 .form:focus-visible{outline:3px solid var(--accent)}
 /* Das Plus im Kopf und das Eingabeblatt darunter: Glas, über allem, mit Rand für die Ansicht */
-.plus{all:unset;cursor:pointer;position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);inset-inline-end:16px;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:var(--accent);z-index:7;-webkit-tap-highlight-color:transparent;
+.plus{all:unset;cursor:pointer;position:fixed;transform:translateZ(0);top:calc(env(safe-area-inset-top,0px) + 10px);inset-inline-end:16px;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:var(--accent);z-index:7;-webkit-tap-highlight-color:transparent;
   background:var(--glass-strong);border:1px solid var(--rim);box-shadow:inset 0 1px 0 var(--shine),0 8px 24px -12px var(--shadow);-webkit-backdrop-filter:blur(24px) saturate(170%);backdrop-filter:blur(24px) saturate(170%)}
 .plus svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round}
 .plus:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
-.sheet{position:fixed;top:calc(env(safe-area-inset-top,0px) + 62px);left:12px;right:12px;max-height:calc(100% - env(safe-area-inset-top,0px) - 150px);overflow:auto;padding:14px;border-radius:24px;z-index:7;
+.sheet{position:fixed;transform:translateZ(0);top:calc(env(safe-area-inset-top,0px) + 62px);left:12px;right:12px;max-height:calc(100% - env(safe-area-inset-top,0px) - 150px);overflow:auto;padding:14px;border-radius:24px;z-index:7;
   background:var(--glass-strong);border:1px solid var(--rim);box-shadow:inset 0 1px 0 var(--shine),0 20px 50px -20px var(--shadow);-webkit-backdrop-filter:blur(28px) saturate(170%);backdrop-filter:blur(28px) saturate(170%)}
 .sheethead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
 .sheethead h2{margin:0;font-size:1.05rem}

@@ -403,6 +403,11 @@ const toastOf = async (page, action) => {
     await page.click('nav button[data-mode="learn"]'); await page.waitForFunction(() => document.querySelector("nav button[aria-current=page]").dataset.mode === "learn", null, { timeout: 4000 }); await sleep(4200);
     const stayPicked = await page.evaluate(() => ({ open: document.querySelector("nav").classList.contains("open"), card: !!document.querySelector("#card") }));
     await page.click('nav button[data-mode="settings"]'); await page.waitForFunction(() => document.querySelector("nav button[aria-current=page]").dataset.mode === "settings", null, { timeout: 4000 }); await sleep(900);
+    // The open pill stays at the bottom of the screen while a long view scrolls (Safari once let it travel up with the content)
+    const navBottomGap = () => page.evaluate(() => Math.round(innerHeight - document.querySelector("nav").getBoundingClientRect().bottom));
+    const gapTop = await navBottomGap(); await page.evaluate(() => scrollTo(0, 900)); await sleep(400); const gapScrolled = await navBottomGap();
+    const scrolled = await page.evaluate(() => scrollY); await page.evaluate(() => scrollTo(0, 0));
+    check("Eman: the always-visible pill stays at the bottom while a long view scrolls", scrolled > 300 && gapTop === gapScrolled && gapTop < 40, { gapTop, gapScrolled, scrolled });
     await page.uncheck("#dks"); await sleep(1600);
     const stayOff = await page.evaluate(() => ({ open: document.querySelector("nav").classList.contains("open"), knob: getComputedStyle(document.querySelector(".knob")).display }));
     check("Eman: with 'dock always visible' the pill stays open without a knob, a pick switches the view and the pill stays; off again, it falls and the knob is back", stayOn.open && stayOn.knob === "none" && stayOn.pad === "100px" && stayPicked.open && stayPicked.card && !stayOff.open && stayOff.knob !== "none", { stayOn, stayPicked, stayOff });
