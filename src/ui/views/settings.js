@@ -1,10 +1,10 @@
 // Einstellungen in vier Gruppen: Funktionen (GitHub-Sync, Erinnerung, Gemini-Key), Lernen, Aussehen (Dock), Daten (Sicherung, Zurücksetzen).
 import { today, hhmm } from "../../core/text.js";
 import { emptyP, merge } from "../../core/progress.js";
-import { $ } from "../dom.js";
+import { $, hold } from "../dom.js";
 
 export function createSettingsView(ctx) {
-  const { S, T, C, local, github, push, session, flash } = ctx, PH = C.phrases || null;
+  const { S, T, C, local, github, push, session, flash, vocab } = ctx, PH = C.phrases || null;
   const TK = local.key("token"), GK = local.key("gemini");
 
   function exportFile() {
@@ -55,6 +55,7 @@ export function createSettingsView(ctx) {
   function renderLearn() {
     return `<label class="fld inline">${T("newPerDay")} <input id="npd" type="number" min="0" max="50" value="${ctx.opt("newPerDay", C.newPerDay || 10)}"></label>
       ${PH ? `<label class="fld inline">${T("newPhrases")} <input id="nppd" type="number" min="0" max="20" value="${ctx.opt("newPhrases", PH.perDay || 3)}"></label>` : ""}
+      ${vocab.has("en") ? `<label class="fld inline">${T("meaningL")} <select id="mlang">${[["ar", "meaningAr"], ["en", "meaningEn"], ["both", "meaningBoth"]].map(([v, k]) => `<option value="${v}" ${ctx.opt("meaning", "ar") === v ? "selected" : ""}>${T(k)}</option>`).join("")}</select></label>` : ""}
       <label class="chk"><input id="pda" type="checkbox" ${ctx.opt("prodAuto", true) ? "checked" : ""}> ${T("prodAuto")}</label>
       <label class="chk"><input id="arf" type="checkbox" ${ctx.opt("arFirst", false) ? "checked" : ""}> ${T("arFirst")}</label>
       <label class="chk"><input id="gvo" type="checkbox" ${ctx.opt("gvoice", true) ? "checked" : ""}> ${T("gvoice")}</label>
@@ -62,7 +63,9 @@ export function createSettingsView(ctx) {
   }
   const renderStyle = () => `<label class="chk"><input id="dkv" type="checkbox" ${ctx.opt("dockV", false) ? "checked" : ""}> ${T("dockVert")}</label>`;
   function renderData() {
-    return `<h3>${T("backupH")}</h3>
+    const missing = vocab.missingEn().length;
+    return `${missing ? `<button class="btn wide" data-act="fillen" ${S.fill.busy ? "disabled" : ""}>${S.fill.busy ? T("fillEnBusy") : T("fillEn").replace("{n}", missing)}</button>` : ""}
+      <h3>${T("backupH")}</h3>
       <div class="row2"><button class="btn" data-act="export">${T("export")}</button>
       <label class="btn filebtn">${T("import")}<input id="imp" type="file" accept="application/json,.json"></label></div>
       <h3>${T("resetH")}</h3>
@@ -89,7 +92,17 @@ export function createSettingsView(ctx) {
       remtest: () => push.test(),
       savegem: () => { const v = ($("#gem").value || "").trim(); if (!v) return; S.gkey = v; local.set(GK, v); flash(T("gemSet")); ctx.render(); },
       delgem: () => { S.gkey = ""; local.remove(GK); ctx.render(); },
-      reset: () => { if (confirm(T("resetQ"))) { S.P = Object.assign(emptyP(), { opts: S.P.opts }); ctx.changed(); session.restart(); } }
+      reset: () => { if (confirm(T("resetQ"))) { S.P = Object.assign(emptyP(), { opts: S.P.opts }); ctx.changed(); session.restart(); } },
+      /* Einmalig: englische Bedeutungen für alle Karten ohne en, mit dem Gemini-Key und dem Token vom Gerät; hält die App so lange */
+      fillen: async () => {
+        if (S.fill.busy) return;
+        if (!S.gkey) { flash(T("needKey")); return; }
+        if (!S.sync.token) { flash(T("needTok")); return; }
+        S.fill.busy = true; hold(true, 180000); ctx.render();
+        try { flash(T("fillEnDone").replace("{n}", await vocab.fillEn())); }
+        catch (e) { flash(e.message === "key" ? T("keyBad") : T("fillEnFail")); }
+        S.fill.busy = false; hold(false); ctx.render();
+      }
     },
     change: {
       imp: el => { if (el.files[0]) importFile(el.files[0]); },
@@ -99,6 +112,7 @@ export function createSettingsView(ctx) {
       slw: el => ctx.setOpt("slow", el.checked),
       gvo: el => ctx.setOpt("gvoice", el.checked),
       pda: el => ctx.setOpt("prodAuto", el.checked),
+      mlang: el => ctx.setOpt("meaning", el.value),
       dkv: el => { ctx.setOpt("dockV", el.checked); ctx.render(); } // das Dock liest die Option beim Zeichnen
     }
   };

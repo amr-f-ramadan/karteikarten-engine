@@ -24,7 +24,7 @@ The engine holds no personal data or settings: no texts, word lists, progress, c
 
 ## What stays in each app
 
-`index.html` (`window.APP`: repo, storage key, all UI texts in `t`, card `fields`, Gemini `rules` including `intro` and `end`, reminder texts in `remind`, push key `vapid`, speaking prompts in `practice`, and optionally `phrases` (fields, Gemini rules, starter-set prompt, new phrases per day); colours, fonts, icon), `cards.js`, `manifest.json`, `sw.js` (browsers require it in the app's own folder), the reminder workflow, and the progress on the app's `progress` branch.
+`index.html` (`window.APP`: repo, storage key, all UI texts in `t`, card `fields` (with `en` the cards carry an English meaning next to the Arabic one, shown by the "Bedeutung zeigen" option; a one-time button fills it in for old cards), Gemini `rules` including `intro` and `end`, reminder texts in `remind`, push key `vapid`, speaking prompts in `practice`, and optionally `phrases` (fields, Gemini rules, starter-set prompt, new phrases per day); colours, fonts, icon), `cards.js`, `manifest.json`, `sw.js` (browsers require it in the app's own folder), the reminder workflow, and the progress on the app's `progress` branch.
 
 ## Phrases
 

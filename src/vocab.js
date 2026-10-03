@@ -1,8 +1,8 @@
 // Wortschatz pflegen: neue Karten und Wendungen mit Gemini, Speichern in cards.js, Löschen, Warteliste.
 import { fullWord, pkey } from "./core/text.js";
-import { cardPrompt, cardSchema, phrasePrompt, phraseSchema, starterPrompt, starterSchema, goodPhrase } from "./core/prompt.js";
+import { cardPrompt, cardSchema, phrasePrompt, phraseSchema, starterPrompt, starterSchema, goodPhrase, enPrompt, EN_SCHEMA } from "./core/prompt.js";
 import { appendCards, serializeCards, parseCards, headOf } from "./core/cardsfile.js";
-import { freeId, shapeCard } from "./core/newcard.js";
+import { freeId, shapeCard, withEn } from "./core/newcard.js";
 import { hold } from "./ui/dom.js";
 
 export function createVocab(ctx) {
@@ -28,8 +28,9 @@ export function createVocab(ctx) {
   const savePhrases = items => github.editCards((src, taken) => {
     const used = new Set();
     const list = items.map(p => {
-      const o = { id: newId(p.w, taken, used), k: "p", g: "x", w: p.w.trim(), cat: (p.cat || "").trim() || T("phNewCat"), ar: p.ar, ex: p.ex };
-      if (p.tr) o.tr = p.tr; if (p.note) o.note = p.note; if (p.src) o.src = p.src;
+      const o = { id: newId(p.w, taken, used), k: "p", g: "x", w: p.w.trim(), cat: (p.cat || "").trim() || T("phNewCat"), ar: p.ar };
+      if (PH.fields.includes("en")) o.en = p.en || "";
+      o.ex = p.ex; if (p.tr) o.tr = p.tr; if (p.note) o.note = p.note; if (p.src) o.src = p.src;
       return o;
     });
     return { out: appendCards(src, list), result: list };
@@ -53,6 +54,23 @@ export function createVocab(ctx) {
       S.list.open = null; ctx.flash(T("deleted")); ctx.render();
     } catch (e) { ctx.flash(T("delFail") + " (" + e.message + ")"); }
     hold(false);
+  }
+
+  /* Englische Bedeutungen für Karten ohne en nachtragen: Zwanzigerpakete an Gemini, dann cards.js einmal neu geschrieben
+     (jede Zeile nur um das Feld en erweitert); gibt die Zahl der ergänzten Karten zurück */
+  const missingEn = () => (has("en") ? store.all.filter(c => !c.en) : []);
+  async function fillEn() {
+    const list = missingEn(), found = new Map();
+    for (let i = 0; i < list.length; i += 20) {
+      const batch = list.slice(i, i + 20), ids = new Set(batch.map(c => c.id));
+      const res = await gemini.generate(enPrompt(C.rules, batch), EN_SCHEMA, a => Array.isArray(a) && a.length > 0);
+      res.forEach(r => { if (ids.has(r.id) && r.en && r.en.trim()) found.set(r.id, r.en.trim()); });
+    }
+    if (!found.size) return 0;
+    await github.editCards(src => ({ out: serializeCards(headOf(src), parseCards(src).map(c => (found.has(c.id) ? withEn(c, found.get(c.id)) : c))), result: null }),
+      () => "Englische Bedeutungen: " + found.size + " Karten");
+    found.forEach((en, id) => store.patch(id, { en }));
+    return found.size;
   }
 
   /* ---------- Warteliste: Wörter, die Gemini gerade nicht erstellen konnte ---------- */
@@ -104,5 +122,5 @@ export function createVocab(ctx) {
     setInterval(workQueue, 5 * 60 * 1000);
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") setTimeout(workQueue, 3000); });
   }
-  return { PH, has, genCard, genPhrase, genStarter, saveCard, savePhrases, deleteCard, waiting, queueWord, unqueue, workQueue, startWorker };
+  return { PH, has, genCard, genPhrase, genStarter, saveCard, savePhrases, deleteCard, missingEn, fillEn, waiting, queueWord, unqueue, workQueue, startWorker };
 }

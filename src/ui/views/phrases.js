@@ -3,7 +3,7 @@ import { esc, pk, gClass } from "../../core/text.js";
 import { boxOf, learnedCount } from "../../core/leitner.js";
 import { goodPhrase } from "../../core/prompt.js";
 import { $, hold, SLOW_MS } from "../dom.js";
-import { dots, field, topicSection, searchBox, waitChips, exRow, arLine, trLine, noteBox } from "../parts.js";
+import { dots, field, topicSection, searchBox, waitChips, exRow, trLine, noteBox, meaningLines, meaningMode } from "../parts.js";
 import { emptyAdd } from "../../state.js";
 import { COLLAPSE_AT, closedSet, listActions } from "../listing.js";
 
@@ -31,7 +31,7 @@ export function createPhrasesView(ctx) {
     const A = S.pad;
     if (A.busy) return;
     const v = id => { const el = $("#" + id); return el ? el.value.trim() : ""; };
-    const card = { w: v("pf_w"), ar: v("pf_ar"), ex: v("pf_ex"), tr: v("pf_tr"), note: v("pf_note"), cat: v("pf_cat") };
+    const card = { w: v("pf_w"), ar: v("pf_ar"), en: v("pf_en"), ex: v("pf_ex"), tr: v("pf_tr"), note: v("pf_note"), cat: v("pf_cat") };
     A.card = card;
     if (!card.w || !card.ar || !card.ex) return;
     if (!S.sync.token) { A.msg = T("needTok"); ctx.render(); return; }
@@ -66,7 +66,7 @@ export function createPhrasesView(ctx) {
       <button class="btn ok" data-act="pgen" ${A.busy ? "disabled" : ""}>${A.busy === "gen" ? T("genBusy") : T("gen")}</button></div>
       ${A.msg ? `<p class="addmsg">${esc(A.msg)}</p>` : ""}
       ${waitChips(vocab.waiting("p"), T)}
-      ${c ? `<div class="preview">${field("pf_w", T("phF_w"), c.w)}${field("pf_ar", T("f_ar"), c.ar)}${field("pf_ex", T("f_ex"), c.ex, 1)}${PH.fields.includes("tr") ? field("pf_tr", T("f_tr"), c.tr, 1) : ""}${field("pf_note", T("f_note"), c.note, 1)}${field("pf_cat", T("phF_cat"), c.cat)}
+      ${c ? `<div class="preview">${field("pf_w", T("phF_w"), c.w)}${field("pf_ar", T("f_ar"), c.ar)}${PH.fields.includes("en") ? field("pf_en", T("f_en"), c.en) : ""}${field("pf_ex", T("f_ex"), c.ex, 1)}${PH.fields.includes("tr") ? field("pf_tr", T("f_tr"), c.tr, 1) : ""}${field("pf_note", T("f_note"), c.note, 1)}${field("pf_cat", T("phF_cat"), c.cat)}
         <div class="row2"><button class="btn" data-act="pdiscard">${T("discard")}</button><button class="btn" data-act="pgen">${T("regen")}</button></div>
         <button class="btn ok wide" data-act="psave" ${A.busy ? "disabled" : ""}>${A.busy === "save" ? T("saving") : T("saveCard")}</button></div>` : ""}
       ${store.phrases.length < 10 ? `<div class="starter"><p class="dim">${T("phStarterHelp")}</p><button class="btn wide" data-act="pstart" ${A.busy ? "disabled" : ""}>${A.busy === "starter" ? T("phStarterBusy") : T("phStarter")}</button></div>` : ""}
@@ -80,7 +80,7 @@ export function createPhrasesView(ctx) {
       const open = S.list.open === c.id;
       groups.get(g).push(`<li class="${gClass(c)} ph" data-s="${esc(store.hay(c))}"><button class="row" data-act="open" data-id="${c.id}">
         <span class="de word">${esc(c.w)}</span>${dots(boxOf(S.P, c), T)}</button>
-        ${open ? `<div class="detail">${arLine(c.ar)}${exRow(c.ex, T("sayEx"))}${trLine(c.tr)}${noteBox(c.note)}<div class="row2"><button class="btn" data-act="sayt" data-t="${esc(c.w.replace(/…/g, ""))}">${T("phSay")}</button><button class="btn again" data-act="del" data-id="${c.id}">${T("delCard")}</button></div></div>` : ""}</li>`);
+        ${open ? `<div class="detail">${meaningLines(c, meaningMode(ctx))}${exRow(c.ex, T("sayEx"))}${trLine(c.tr)}${noteBox(c.note)}<div class="row2"><button class="btn" data-act="sayt" data-t="${esc(c.w.replace(/…/g, ""))}">${T("phSay")}</button><button class="btn again" data-act="del" data-id="${c.id}">${T("delCard")}</button></div></div>` : ""}</li>`);
     });
     const closed = all.length > COLLAPSE_AT ? closedSet(S, "p", [...groups.keys()]) : null;
     const secs = [...groups.entries()].map(([t, rows]) => topicSection(t, rows, closed ? closed.has(t) : null)).join("");
