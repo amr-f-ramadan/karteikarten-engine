@@ -2,7 +2,7 @@
 import { fullWord, pkey, isP } from "./core/text.js";
 import { cardPrompt, cardSchema, phrasePrompt, phraseSchema, starterPrompt, starterSchema, goodPhrase, anyPrompt, anySchema, goodAny, fillPrompt, fillSchema } from "./core/prompt.js";
 import { appendCards, serializeCards, parseCards, headOf } from "./core/cardsfile.js";
-import { freeId, shapeCard, withFields, mergeFamily, cleanForms } from "./core/newcard.js";
+import { freeId, shapeCard, withFields, mergeFamily, cleanForms, cleanSyn } from "./core/newcard.js";
 import { hold } from "./ui/dom.js";
 
 export function createVocab(ctx) {
@@ -82,7 +82,8 @@ export function createVocab(ctx) {
         res.forEach(r => {
           if (!ids.has(r.id)) return;
           const p = patches.get(r.id) || {};
-          want.forEach(f => { if (f in r) p[f] = f === "forms" ? cleanForms(r.forms, has("en"), store.byId(r.id).w) : String(r[f] || "").trim(); });
+          const w = store.byId(r.id).w;
+          want.forEach(f => { if (f in r) p[f] = f === "forms" ? cleanForms(r.forms, has("en"), w) : f === "syn" ? cleanSyn(r.syn, w) : String(r[f] || "").trim(); });
           patches.set(r.id, p);
         });
       }

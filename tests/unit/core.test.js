@@ -8,7 +8,7 @@ import { CardStore } from "../../src/core/store.js";
 import { cardPrompt, cardSchema, phrasePrompt, starterPrompt, enPrompt, EN_SCHEMA, anyPrompt, anySchema, goodAny, fillPrompt, fillSchema } from "../../src/core/prompt.js";
 import { diffHTML } from "../../src/core/diff.js";
 import { parseCards, serializeCards, appendCards } from "../../src/core/cardsfile.js";
-import { freeId, shapeCard, withEn, withFields, mergeFamily, guessPos, pickFace, faceOf } from "../../src/core/newcard.js";
+import { freeId, shapeCard, withEn, withFields, mergeFamily, guessPos, pickFace, faceOf, cleanSyn, cleanForms } from "../../src/core/newcard.js";
 import { nearestTurn, settleTarget, glideDuration } from "../../src/core/dock.js";
 import { RECENT, nounWeight, pickNoun } from "../../src/core/quiz.js";
 
@@ -243,4 +243,14 @@ test("synonyms, forms, one prompt for both kinds, fill and family merge", () => 
   assert.equal(pickFace(c, 0.2), 0); assert.equal(pickFace(c, 0.5), 1); assert.equal(pickFace(c, 0.99), 2); assert.equal(pickFace({ w: "x" }, 0.9), 0);
   assert.equal(faceOf(c, 2).w, "empfindlich"); assert.equal(faceOf(c, 0), c);
   st.replace(Object.assign({}, st.byId("blick"), { syn: "Schau" })); assert.ok(st.hay(st.byId("blick")).includes("schau"), "the search text knows synonyms after a replace");
+});
+
+test("synonyms and forms from Gemini are cleaned: reasoning text, the word itself, doubled articles", () => {
+  const rambling = "Anmerkung, Kommentar, Äußerung und Bemerkung in einem Satz verwenden oder weglassen wenn nicht nötig, Kommentar oder Notiz passt ebenso gut wie Feststellung je nach Kontext. Wichtig ist kurz";
+  assert.equal(cleanSyn(rambling, "Bemerkung"), "Anmerkung, Kommentar", "only the first two short terms stay");
+  assert.equal(cleanSyn("aufnehmen, aufgreifen", "aufgreifen"), "aufnehmen", "the word itself is dropped");
+  assert.equal(cleanSyn("die Deadline, Termin, der Termin", "Frist"), "die Deadline, Termin", "duplicates without article dropped");
+  assert.equal(cleanSyn("", "x"), ""); assert.equal(cleanSyn(undefined, "x"), "");
+  const fs = cleanForms([{ w: "die Unterstreichung", g: "die", pos: "n", ar: "a" }, { w: ",h", g: "x", pos: "adj", ar: "b" }, { w: "der die Riese", g: "der", pos: "n", ar: "c" }, { w: "betont", g: "x", pos: "adj", ar: "d" }], false, "unterstreichen");
+  assert.deepEqual(fs.map(f => f.w), ["Unterstreichung", "Riese", "betont"], "leading articles are removed, garbage without letters is dropped");
 });

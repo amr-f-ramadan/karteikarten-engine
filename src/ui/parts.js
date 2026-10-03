@@ -1,6 +1,7 @@
 // Wiederkehrende HTML-Bausteine der Ansichten.
 import { esc, ART, fullWord, gClass } from "../core/text.js";
 import { INT } from "../core/leitner.js";
+import { cleanSyn } from "../core/newcard.js";
 import { plain } from "./dom.js";
 
 export const speakBtn = (what, label) => `<button class="say" data-say="${what}" aria-label="${esc(label)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg></button>`;
@@ -30,7 +31,7 @@ export const noteBox = note => (note ? `<p class="note">${note}</p>` : "");
 export const fillButton = (n, busy, T) => (n ? `<button class="btn wide fillbtn" data-act="fillen" ${busy ? "disabled" : ""}>${busy ? T("fillBusy") : T("fill").replace("{n}", n)}</button>` : "");
 /* Synonyme als Chips: ein Wort, das in der Liste ist, bekommt die Aktion act (goto öffnet seine Karte, sayt spricht es); ein fremdes wird nur gesprochen */
 export const synRow = (c, store, T, act) => {
-  const items = (c.syn || "").split(",").map(s => s.trim()).filter(Boolean);
+  const items = cleanSyn(c.syn, c.w).split(",").map(s => s.trim()).filter(Boolean); // auch alte, schon gespeicherte Felder nur gekürzt zeigen
   return items.length ? `<div class="famrow syn"><span class="famh">${T("synH")}</span>${items.map(s => { const hit = store.find(s); return hit
     ? `<button class="famchip de ${gClass(hit)}" data-act="${act}" data-id="${hit.id}" data-t="${esc(fullWord(hit))}">${esc(s)}</button>`
     : `<button class="famchip de g-x dim" data-act="sayt" data-t="${esc(s)}">${esc(s)}</button>`; }).join("")}</div>` : "";
