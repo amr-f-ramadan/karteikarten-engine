@@ -45,6 +45,10 @@ header h1{font-size:2rem;margin:0;font-weight:800;letter-spacing:-.02em}
 .ex{margin:0;font-style:italic;flex:1;text-align:left;line-height:1.55}
 .ex b{font-style:normal;color:var(--g,var(--ink))}
 .tr{font-family:var(--arf);margin:0;color:var(--muted);text-align:right}
+/* Englische Bedeutung (Feld en, Option "Bedeutung zeigen"): wie die arabische, in der Schrift der Oberfläche, von links */
+.en{font-size:1.05rem;font-weight:500;margin:0;padding:8px 14px;border-radius:16px;background:var(--glass-strong);text-align:left}
+.en-big{font-size:clamp(1.3rem,5vw,1.6rem);font-weight:600;margin:0}
+.en-big.sub{font-size:1.05rem;font-weight:500;color:var(--muted);margin-top:6px}
 .note{margin:6px 0 0;font-size:.88rem;color:var(--muted);background:var(--glass-strong);padding:10px 12px;border-radius:14px}
 .say{position:absolute;bottom:14px;inset-inline-end:14px;width:44px;height:44px;border-radius:50%;border:1px solid var(--rim);background:var(--glass-strong);color:var(--ink);display:grid;place-items:center;cursor:pointer;padding:0;z-index:1;
   -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}

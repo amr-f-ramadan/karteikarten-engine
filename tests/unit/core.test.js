@@ -5,10 +5,10 @@ import { slug, sameStem, topicOf, norm, pk, pkey, fullWord, fill, today } from "
 import { INT, recordAnswer, freshCards, dueCards, newToday, allowMoreNew, boxOf } from "../../src/core/leitner.js";
 import { emptyP, merge, prune } from "../../src/core/progress.js";
 import { CardStore } from "../../src/core/store.js";
-import { cardPrompt, cardSchema, phrasePrompt, starterPrompt } from "../../src/core/prompt.js";
+import { cardPrompt, cardSchema, phrasePrompt, starterPrompt, enPrompt, EN_SCHEMA } from "../../src/core/prompt.js";
 import { diffHTML } from "../../src/core/diff.js";
 import { parseCards, serializeCards, appendCards } from "../../src/core/cardsfile.js";
-import { freeId, shapeCard } from "../../src/core/newcard.js";
+import { freeId, shapeCard, withEn } from "../../src/core/newcard.js";
 import { nearestTurn, settleTarget, glideDuration } from "../../src/core/dock.js";
 import { RECENT, nounWeight, pickNoun } from "../../src/core/quiz.js";
 
@@ -94,7 +94,7 @@ test("card store: indexes, families in list order, lookups", () => {
   assert.equal(st.phraseGroups(), "Füllwort");
   assert.ok(st.exists("die Miete")); assert.ok(!st.exists("Mieter"));
   assert.ok(st.existsP("also ich denke dass")); assert.ok(st.isDone("miete"));
-  assert.equal(st.hay(st.byId("blick")), "der blick نظرة   ein blick.  wohnen blick ");
+  assert.equal(st.hay(st.byId("blick")), "der blick نظرة    ein blick.  wohnen blick ", "the English meaning has its slot after the Arabic one");
   st.push({ id: "neu", g: "x", w: "neu", cat: "Geld", ar: "", ex: "", fam: "blick" });
   assert.deepEqual(st.family(st.byId("blick")).map(c => c.id), ["blick", "ausblick", "neu"], "indexes rebuild after push");
   assert.ok(st.remove("neu")); assert.equal(st.byId("neu"), null);
@@ -186,4 +186,19 @@ test("quiz: weights follow the answers, the last shown nouns are skipped", () =>
   const rnd = () => { seed = (seed * 48271) % 2147483647; return seed / 2147483647; };
   for (let i = 0; i < 200; i++) { shown.push(pickNoun(nouns, {}, shown, rnd).id); }
   assert.ok(shown.every((id, i) => !shown.slice(Math.max(0, i - RECENT), i).includes(id)), "no noun comes back within eight picks");
+});
+
+test("english meaning: shaped after ar, added to an old card in place, asked for in batches", () => {
+  const st = new CardStore(cards());
+  const o = shapeCard({ w: "Haus", g: "das", ar: "بيت", en: "house", ex: "x" }, { id: "haus", fields: ["w", "g", "ar", "en", "ex"], newCat: "Neu", store: st });
+  assert.deepEqual(Object.keys(o), ["id", "g", "w", "cat", "hint", "ar", "en", "ex"], "en sits after ar");
+  assert.equal(shapeCard({ w: "Haus", g: "das", ar: "بيت", ex: "x" }, { id: "haus", fields: ["w", "g", "ar", "ex"], newCat: "Neu", store: st }).en, undefined, "no en without the field");
+  const old = { id: "blick", g: "der", w: "Blick", cat: "Wohnen", ar: "نظرة", ex: "E", fam: "blick" };
+  assert.deepEqual(Object.keys(withEn(old, "glance")), ["id", "g", "w", "cat", "ar", "en", "ex", "fam"], "en placed after ar in an old card");
+  assert.equal(withEn(old, "glance").en, "glance");
+  assert.deepEqual(Object.keys(withEn({ id: "x", w: "x" }, "e")), ["id", "w", "en"], "without ar it goes last");
+  const p = enPrompt({ intro: "I", en: "en: short English", end: "E" }, [old, { id: "alsoich", k: "p", g: "x", w: "Also …", ar: "يعني" }]);
+  assert.equal(p, 'I\nErgänze für jede Karte nur das Feld en und gib ihre id unverändert zurück.\n- en: short English\nKarten:\n{"id":"blick","w":"der Blick","ar":"نظرة"}\n{"id":"alsoich","w":"Also …","ar":"يعني"}\nE');
+  assert.deepEqual(EN_SCHEMA.items.required, ["id", "en"]);
+  st.patch("blick", { en: "glance" }); assert.ok(st.hay(st.byId("blick")).includes("glance"), "the search text knows the English meaning");
 });

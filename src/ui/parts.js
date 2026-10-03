@@ -18,5 +18,11 @@ export const searchBox = (query, T) => `<input id="q" class="search" type="searc
 export const waitChips = (entries, T) => (entries.length ? `<div class="wait"><p class="waith">${T("waitH")}</p>${entries.map(([k, s]) => `<span class="chip de">${esc(s.w)}<button data-act="unq" data-k="${esc(k)}" aria-label="${T("waitRm")}">×</button></span>`).join("")}</div>` : "");
 export const exRow = (ex, label) => `<div class="exrow"><p class="ex de">${ex}</p>${sayT(ex, label)}</div>`;
 export const arLine = ar => `<p class="ar" lang="ar" dir="rtl">${esc(ar)}</p>`;
+export const enLine = en => (en ? `<p class="en" lang="en" dir="ltr">${esc(en)}</p>` : "");
+/* Bedeutung: Arabisch, Englisch oder beides (Option meaning), nur wenn die App das Feld en hat; fehlt en auf einer Karte, bleibt Arabisch */
+export const meaningMode = ctx => (ctx.vocab.has("en") ? ctx.opt("meaning", "ar") : "ar");
+export const meaningLines = (c, mode) => (mode === "en" && c.en ? enLine(c.en) : mode === "both" ? arLine(c.ar) + enLine(c.en) : arLine(c.ar));
+export const meaningBig = (c, mode) => (mode === "en" && c.en ? `<p class="en-big" lang="en" dir="ltr">${esc(c.en)}</p>`
+  : `<p class="ar-big">${esc(c.ar)}</p>${mode === "both" && c.en ? `<p class="en-big sub" lang="en" dir="ltr">${esc(c.en)}</p>` : ""}`);
 export const trLine = tr => (tr ? `<p class="tr" lang="ar" dir="rtl">${esc(tr)}</p>` : "");
 export const noteBox = note => (note ? `<p class="note">${note}</p>` : "");

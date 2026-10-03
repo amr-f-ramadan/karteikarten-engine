@@ -3,7 +3,7 @@ import { esc, today, isP } from "../../core/text.js";
 import { dueByTomorrow, allowMoreNew } from "../../core/leitner.js";
 import { gClass } from "../../core/text.js";
 import { $, calm } from "../dom.js";
-import { speakBtn, wordHTML, famRow, arLine, trLine, noteBox } from "../parts.js";
+import { speakBtn, wordHTML, famRow, trLine, noteBox, meaningLines, meaningBig, meaningMode } from "../parts.js";
 
 export function createLearnView(ctx) {
   const { S, T, C, store, session } = ctx, L = S.learn;
@@ -16,13 +16,13 @@ export function createLearnView(ctx) {
     const c = L.cur, s = S.P.cards[c.id], always = ctx.opt("arFirst", false);
     const arFirst = always || (ctx.opt("prodAuto", true) && !!s && s.b >= 2);
     const front = arFirst
-      ? `<p class="ar-big">${esc(c.ar)}</p><p class="hint">${T(always ? "whatDe" : isP(c) ? "sayPh" : "sayDe")}</p>${calm() ? "" : '<div class="timer"></div>'}`
+      ? `${meaningBig(c, meaningMode(ctx))}<p class="hint">${T(always ? "whatDe" : isP(c) ? "sayPh" : "sayDe")}</p>${calm() ? "" : '<div class="timer"></div>'}`
       : `${wordHTML(c)}${c.hint ? `<p class="hint de">${esc(c.hint)}</p>` : ""}`;
     // Rückseite: das Wort mit seinem Lautsprecher in einer Zeile (wie beim Beispielsatz)
     const back = `
       <div class="wordrow">${wordHTML(c)}${speakBtn("w", T("sayWord"))}</div>
       ${arFirst && c.hint ? `<p class="hint de">${esc(c.hint)}</p>` : ""}
-      ${arLine(c.ar)}
+      ${meaningLines(c, meaningMode(ctx))}
       ${c.def ? `<p class="def de">${c.def}</p>` : ""}
       ${c.perf ? `<p class="perf de">${T("perfL")} <b>${esc(c.perf)}</b></p>` : ""}
       <div class="exrow"><p class="ex de">${c.ex}</p>${speakBtn("ex", T("sayEx"))}</div>

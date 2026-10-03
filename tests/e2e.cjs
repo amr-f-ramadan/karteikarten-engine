@@ -195,7 +195,7 @@ const toastOf = async (page, action) => {
   const runAmr = async variant => {
     const gh = makeGitHub("amr-f-ramadan/de-karteikarten", { "main:cards.js": amrCards });
     const gem = makeGemini();
-    gem.card = { w: "Kündigung", g: "die", hint: "Plural: die Kündigungen", perf: "", ar: "إنهاء عقد، استقالة", def: "Das Beenden eines Vertrags.", ex: "Ich habe die <b>Kündigung</b> bekommen.", note: "", fam: "kündigen", cat: "Arbeit" };
+    gem.card = { w: "Kündigung", g: "die", hint: "Plural: die Kündigungen", perf: "", ar: "إنهاء عقد، استقالة", en: "notice, termination", def: "Das Beenden eines Vertrags.", ex: "Ich habe die <b>Kündigung</b> bekommen.", note: "", fam: "kündigen", cat: "Arbeit" };
     const { ctx, page } = await newPage(browser, { storage: { "kk-amr-v2:gemini": "fake-key", "kk-amr-v2:token": "fake-token" } });
     await ctx.route("https://api.github.com/**", gh.handle);
     await ctx.route("https://generativelanguage.googleapis.com/**", gem.handle);
@@ -215,14 +215,31 @@ const toastOf = async (page, action) => {
     await tab(page, "settings"); await page.click(".knob"); await page.waitForFunction(() => document.querySelector("nav").classList.contains("open")); await sleep(900);
     const label = await page.evaluate(() => { const l = document.querySelector("nav button.on .lbl"), r = document.createRange(); r.selectNodeContents(l); return { text: l.textContent, width: Math.round(r.getBoundingClientRect().width), size: getComputedStyle(l).fontSize }; });
     await page.keyboard.press("Escape");
+    // English meaning: option in the learning group, both meanings on the opened card; the one-time fill for the old cards asks
+    // Gemini in batches of twenty (mocked per batch) and rewrites cards.js with en after ar
+    await page.selectOption("#mlang", "both"); await sleep(100);
+    await tab(page, "list"); await page.click('[data-act="open"][data-id="kuendigung"]'); await sleep(450);
+    const meaning = await page.evaluate(() => ({ ar: (document.querySelector(".detail .ar") || {}).textContent, en: (document.querySelector(".detail .en") || {}).textContent }));
+    await tab(page, "settings");
+    const fillBtn = await page.$('[data-act="fillen"]'), fillText = fillBtn ? await fillBtn.textContent() : null;
+    const card0 = gem.card;
+    gem.card = body => { const txt = body.contents[0].parts[0].text; return txt.includes("Feld en") ? [...txt.matchAll(/"id":"([^"]+)"/g)].map(m => ({ id: m[1], en: "EN " + m[1] })) : card0; };
+    const fillToast = await toastOf(page, () => page.click('[data-act="fillen"]'));
+    const fillPut = gh.log.filter(e => e.method === "PUT" && e.path.endsWith("/cards.js")).pop(), filled = fillPut ? unb64(fillPut.body.content) : "";
+    const fillCalls = gem.calls.filter(c => c.body.contents[0].parts[0].text.includes("Feld en")).length;
+    await tab(page, "list"); await page.click('.list .row'); await sleep(450);
+    const oldEn = await page.evaluate(() => (document.querySelector(".detail .en") || {}).textContent);
     const errors = page.errors; await ctx.close();
-    return { run, errors, label };
+    return { run, errors, label, english: { meaning, fillText, fillToast, filled, fillCalls, oldEn } };
   };
   const hash = run => require("crypto").createHash("sha256").update(JSON.stringify(run)).digest("hex");
   if (CAPTURE) { const { run } = await runAmr("amr-capture"); fs.writeFileSync(FIX + "/amr-expected.sha256", hash(run) + "\n"); console.log("captured tests/fixtures/amr-expected.sha256"); }
   const want = fs.readFileSync(FIX + "/amr-expected.sha256", "utf8").trim();
-  const { run: got, errors: amrErrors, label: amrLabel } = await runAmr("de-karteikarten");
+  const { run: got, errors: amrErrors, label: amrLabel, english: amrEnglish } = await runAmr("de-karteikarten");
   check("Amr: the centred label 'Einstellungen' fits inside the lens", amrLabel.text === "Einstellungen" && amrLabel.width <= 84, amrLabel);
+  const amrN = (amrCards.match(/^ \{/gm) || []).length, en = amrEnglish;
+  check("Amr: with 'both' the opened card shows the Arabic and the English meaning", en.meaning.ar === "إنهاء عقد، استقالة" && en.meaning.en === "notice, termination", en.meaning);
+  check("Amr: the one-time fill lists the old cards without English, asks Gemini in batches of twenty, writes en after ar into every line and shows it", en.fillText === `Englische Bedeutungen ergänzen (${amrN} Karten)` && en.fillToast === `${amrN} Karten ergänzt` && en.fillCalls === Math.ceil(amrN / 20) && (en.filled.match(/"ar":"[^"]*","en":"EN [^"]+"/g) || []).length === amrN && en.filled.includes('"en":"notice, termination"') && /^EN /.test(en.oldEn), { fillText: en.fillText, fillToast: en.fillToast, fillCalls: en.fillCalls, lines: (en.filled.match(/"en":"EN /g) || []).length, amrN, oldEn: en.oldEn });
   if (process.env.DUMP_RUN) fs.writeFileSync(process.env.DUMP_RUN, JSON.stringify(got, null, 1));
   check("Amr: Gemini request, add form, article labels and saved card exactly as with his original engine", hash(got) === want, { formIds: got.formIds, savedLine: got.savedLine, promptStart: got.request && got.request.contents[0].parts[0].text.slice(0, 200) });
   check("Amr: no page errors", !amrErrors.length, amrErrors);
@@ -258,7 +275,7 @@ const toastOf = async (page, action) => {
     const syncState = await (async () => { await tab(page, "settings"); return page.textContent("#syncState"); })();
     check("Eman: sync status is Arabic 'متزامن'", syncState === "متزامن", syncState);
     const groups = await page.$$eval(".settings .grp .gh", els => els.map(e => e.textContent));
-    check("Eman: the settings come in four Arabic groups (functions, learning, look, data)", JSON.stringify(groups) === JSON.stringify(["الوظايف", "المذاكرة", "الشكل", "البيانات"]) && !!(await page.$("#dkv")), groups);
+    check("Eman: the settings come in four Arabic groups (functions, learning, look, data), no English option without the field", JSON.stringify(groups) === JSON.stringify(["الوظايف", "المذاكرة", "الشكل", "البيانات"]) && !!(await page.$("#dkv")) && !(await page.$("#mlang")) && !(await page.$('[data-act="fillen"]')), groups);
     await grab(page, "settings-with-token");
     const htmlAttrs = await page.evaluate(() => [document.documentElement.lang, document.documentElement.dir, document.title, document.querySelector("header h1").textContent, document.querySelector('meta[name="apple-mobile-web-app-title"]').content]);
     check("Eman: lang/dir/title/header/home-screen name unchanged", JSON.stringify(htmlAttrs) === JSON.stringify(["ar", "rtl", "كروت ألماني", "كلمات ألماني", "Deutsch"]), htmlAttrs);

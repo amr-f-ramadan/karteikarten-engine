@@ -37,8 +37,10 @@ export class CardStore {
   /* Wartelisten-Eintrag erledigt: das Wort oder seine Quelle (src) ist in der Liste */
   isDone(k) { return this.idx.byWord.has(k) || this.idx.bySrc.has(k); }
   /* Suchtext einer Karte, einmal gebaut */
-  hay(c) { let h = this._hay.get(c); if (h === undefined) { h = norm([fullWord(c), c.ar, c.hint, c.def, c.ex, c.tr, c.cat, c.fam, c.perf].join(" ")); this._hay.set(c, h); } return h; }
+  hay(c) { let h = this._hay.get(c); if (h === undefined) { h = norm([fullWord(c), c.ar, c.en, c.hint, c.def, c.ex, c.tr, c.cat, c.fam, c.perf].join(" ")); this._hay.set(c, h); } return h; }
   push(c) { this.all.push(c); this.touch(); }
+  /* Felder einer Karte ändern (id, Wort und Art bleiben: die Indizes gelten weiter, nur der Suchtext nicht) */
+  patch(id, fields) { const c = this.byId(id); if (!c) return false; Object.assign(c, fields); this._hay.delete(c); return true; }
   remove(id) { const i = this.all.findIndex(c => c.id === id); if (i >= 0) this.all.splice(i, 1); this.touch(); return i >= 0; }
   /* Stand aus GitHub übernehmen: verschwundene Karten raus, neue hinten dran; gibt die neuen zurück */
   syncWith(list) {

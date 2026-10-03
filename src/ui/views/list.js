@@ -2,7 +2,7 @@
 import { esc, fullWord, topicOf, gClass } from "../../core/text.js";
 import { boxOf, learnedCount } from "../../core/leitner.js";
 import { $, hold, SLOW_MS } from "../dom.js";
-import { wordHTML, dots, field, topicSection, searchBox, waitChips, famRow, exRow, arLine, trLine } from "../parts.js";
+import { wordHTML, dots, field, topicSection, searchBox, waitChips, famRow, exRow, trLine, meaningLines, meaningMode } from "../parts.js";
 import { emptyAdd } from "../../state.js";
 import { COLLAPSE_AT, closedSet, listActions } from "../listing.js";
 
@@ -11,7 +11,7 @@ export function createListView(ctx) {
 
   function readForm() {
     const v = id => { const el = $("#" + id); return el ? el.value.trim() : ""; };
-    return { w: v("f_w"), g: v("f_g") || "x", hint: v("f_hint"), perf: v("f_perf"), ar: v("f_ar"), def: v("f_def"), ex: v("f_ex"), tr: v("f_tr"), note: v("f_note"), fam: v("f_fam"), cat: v("f_cat") };
+    return { w: v("f_w"), g: v("f_g") || "x", hint: v("f_hint"), perf: v("f_perf"), ar: v("f_ar"), en: v("f_en"), def: v("f_def"), ex: v("f_ex"), tr: v("f_tr"), note: v("f_note"), fam: v("f_fam"), cat: v("f_cat") };
   }
   async function doGen() {
     const el = $("#nw"); if (el) S.add.word = el.value.trim();
@@ -55,7 +55,7 @@ export function createListView(ctx) {
       <button class="btn ok" data-act="gen" ${A.busy ? "disabled" : ""}>${A.busy === "gen" ? T("genBusy") : T("gen")}</button></div>
       ${A.msg ? `<p class="addmsg">${esc(A.msg)}</p>` : ""}
       ${waitChips(vocab.waiting("w"), T)}
-      ${c ? `<div class="preview">${f("f_w", c.w)}${sel}${f("f_hint", c.hint)}${vocab.has("perf") ? f("f_perf", c.perf) : ""}${f("f_ar", c.ar)}${vocab.has("def") ? f("f_def", c.def, 1) : ""}${f("f_ex", c.ex, 1)}${vocab.has("tr") ? f("f_tr", c.tr, 1) : ""}${f("f_note", c.note, 1)}${f("f_cat", c.cat)}${f("f_fam", c.fam)}
+      ${c ? `<div class="preview">${f("f_w", c.w)}${sel}${f("f_hint", c.hint)}${vocab.has("perf") ? f("f_perf", c.perf) : ""}${f("f_ar", c.ar)}${vocab.has("en") ? f("f_en", c.en) : ""}${vocab.has("def") ? f("f_def", c.def, 1) : ""}${f("f_ex", c.ex, 1)}${vocab.has("tr") ? f("f_tr", c.tr, 1) : ""}${f("f_note", c.note, 1)}${f("f_cat", c.cat)}${f("f_fam", c.fam)}
         <div class="row2"><button class="btn" data-act="discard">${T("discard")}</button><button class="btn" data-act="gen">${T("regen")}</button></div>
         <button class="btn ok wide" data-act="savecard" ${A.busy ? "disabled" : ""}>${A.busy === "save" ? T("saving") : T("saveCard")}</button></div>` : ""}
     </section>`;
@@ -69,7 +69,7 @@ export function createListView(ctx) {
       const open = S.list.open === c.id;
       topics.get(famTopic).push(`<li class="${gClass(c)}${sub ? " sub" : ""}${inFam ? " infam" : ""}" data-s="${esc(store.hay(c))}"><button class="row" data-act="open" data-id="${c.id}">
         ${wordHTML(c)}${dots(boxOf(S.P, c), T)}</button>
-        ${open ? `<div class="detail">${arLine(c.ar)}${c.perf ? `<p class="perf de">${T("perfL")} <b>${esc(c.perf)}</b></p>` : ""}${exRow(c.ex, T("sayEx"))}${trLine(c.tr)}${famRow(store.relatives(c), T)}<div class="row2"><button class="btn" data-act="sayt" data-t="${esc(fullWord(c))}">${T("phSay")}</button><button class="btn again" data-act="del" data-id="${c.id}">${T("delCard")}</button></div></div>` : ""}</li>`);
+        ${open ? `<div class="detail">${meaningLines(c, meaningMode(ctx))}${c.perf ? `<p class="perf de">${T("perfL")} <b>${esc(c.perf)}</b></p>` : ""}${exRow(c.ex, T("sayEx"))}${trLine(c.tr)}${famRow(store.relatives(c), T)}<div class="row2"><button class="btn" data-act="sayt" data-t="${esc(fullWord(c))}">${T("phSay")}</button><button class="btn again" data-act="del" data-id="${c.id}">${T("delCard")}</button></div></div>` : ""}</li>`);
     });
     const words = store.words, closed = words.length > COLLAPSE_AT ? closedSet(S, "w", [...topics.keys()]) : null;
     const secs = [...topics.entries()].map(([t, rows]) => topicSection(t, rows, closed ? closed.has(t) : null)).join("");

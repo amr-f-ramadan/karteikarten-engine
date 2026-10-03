@@ -3,7 +3,7 @@
 import { esc, ART, fullWord, gClass } from "../../core/text.js";
 import { RECENT, pickNoun } from "../../core/quiz.js";
 import { $ } from "../dom.js";
-import { sayT, arLine } from "../parts.js";
+import { sayT, meaningLines, meaningMode } from "../parts.js";
 
 export function createQuizView(ctx) {
   const { S, T, store, voice } = ctx;
@@ -36,7 +36,7 @@ export function createQuizView(ctx) {
       <p class="meta">${T("artQ")}</p>
       <div class="card quiz ${q.picked ? gClass(c) : ""}">
         <div class="face"><span class="de word">${q.picked ? `<span class="art">${ART[c.g]}</span> ` : "<span class=\"blank\">___</span> "}${esc(c.w)}</span>
-        ${q.picked ? arLine(c.ar) : ""}</div>
+        ${q.picked ? meaningLines(c, meaningMode(ctx)) : ""}</div>
         ${q.picked ? sayT(fullWord(c), T("sayWord")) : ""}
       </div>
       <div class="arts">${opts}</div>

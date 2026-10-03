@@ -1,4 +1,5 @@
 // Aufträge und Antwortformen für Gemini. Die Regeln und Texte kommen aus window.APP (rules, phrases, practice).
+import { fullWord } from "./text.js";
 const STR = { type: "STRING" };
 const LIST = { type: "ARRAY", items: STR };
 
@@ -16,6 +17,11 @@ const phraseRules = (ph, groups) => ph.fields.map(f => "- " + ph.rules[f].replac
 export const phrasePrompt = (ph, word, groups) => [ph.rules.intro, `Wendung oder Ausdruck: "${word}"`, "Regeln:"].concat(phraseRules(ph, groups)).join("\n");
 export const starterPrompt = (ph, groups) => [ph.starter, "Regeln für jede Wendung:"].concat(phraseRules(ph, groups)).join("\n");
 export const goodPhrase = p => !!(p && p.w && p.ar && p.ex);
+
+/* Englische Bedeutung für vorhandene Karten nachtragen: je Karte nur id, Wort und Arabisch, die Regel en aus der App */
+export const EN_SCHEMA = { type: "ARRAY", items: { type: "OBJECT", properties: { id: STR, en: STR }, required: ["id", "en"] } };
+export const enPrompt = (rules, cards) => [rules.intro, "Ergänze für jede Karte nur das Feld en und gib ihre id unverändert zurück.", "- " + rules.en, "Karten:"]
+  .concat(cards.map(c => JSON.stringify({ id: c.id, w: fullWord(c), ar: c.ar })), rules.end).join("\n");
 
 export const PR_TASK = { type: "OBJECT", properties: { task: STR, starter: STR }, required: ["task", "starter"] };
 const EDITS = { type: "ARRAY", items: { type: "OBJECT", properties: { wrong: STR, right: STR, kind: { type: "STRING", enum: ["error", "style"] } }, required: ["wrong", "right", "kind"] } };
