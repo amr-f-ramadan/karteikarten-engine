@@ -42,6 +42,8 @@ export function createDock(ctx, nav) {
   const mod = i => ((i % N) + N) % N;
   // Senkrecht läuft die Reihe von oben nach unten, in beiden Schreibrichtungen; waagerecht ist sie in RTL gespiegelt
   const isV = () => document.body.classList.contains("dock-v");
+  // Option "Dock immer sichtbar": die Pille bleibt offen, der Knopf ist weg, nichts schließt sie
+  const stay = () => !!ctx.opt("dockStay", false);
   const dir = () => (!isV() && getComputedStyle(nav).direction === "rtl" ? -1 : 1);
   const axis = e => (isV() ? e.clientY : e.clientX);
   const current = () => Math.max(0, items.findIndex(b => b.dataset.mode === S.mode));
@@ -74,8 +76,10 @@ export function createDock(ctx, nav) {
     };
     anim = requestAnimationFrame(step);
   }
-  const idle = () => { clearTimeout(idleT); idleT = setTimeout(() => setOpen(false), IDLE_MS); };
-  function setOpen(open) {
+  const idle = () => { clearTimeout(idleT); if (!stay()) idleT = setTimeout(() => setOpen(false), IDLE_MS); };
+  /* quiet: beim Öffnen durch die Option keinen Fokus setzen (die Ansicht behält ihn) */
+  function setOpen(open, quiet) {
+    if (!open && stay()) return;
     clearTimeout(idleT); clearTimeout(closeT);
     nav.classList.toggle("open", open); nav.setAttribute("aria-hidden", String(!open));
     knob.setAttribute("aria-expanded", String(open)); document.body.classList.toggle("dock-open", open);
@@ -87,7 +91,7 @@ export function createDock(ctx, nav) {
       const cur = items[current()], lbl = cur.querySelector(".lbl");
       nav.classList.remove("rising"); cur.style.transform = "translate(0px, 0px) scale(1)"; if (lbl) lbl.style.opacity = "0";
       void nav.offsetWidth; nav.classList.add("rising"); clearTimeout(riseT); riseT = setTimeout(() => nav.classList.remove("rising"), RISE_MS);
-      place(); cur.focus({ preventScroll: true }); idle();
+      place(); if (!quiet) cur.focus({ preventScroll: true }); idle();
     } else {
       if (nav.contains(document.activeElement)) knob.focus({ preventScroll: true });
       // Der Text verschwindet sofort, sonst stünde er noch unter dem Symbol, während die Pille in den Knopf fällt
@@ -105,7 +109,7 @@ export function createDock(ctx, nav) {
   /* Erst landet die Reihe, dann wechselt die Ansicht; die Pille bleibt noch die Ruhezeit oben und sinkt dann */
   function pick(target) {
     clearTimeout(idleT); clearTimeout(closeT);
-    glideTo(target, () => { ctx.go(items[mod(target)].dataset.mode); closeT = setTimeout(() => setOpen(false), IDLE_MS); });
+    glideTo(target, () => { ctx.go(items[mod(target)].dataset.mode); if (!stay()) closeT = setTimeout(() => setOpen(false), IDLE_MS); });
   }
 
   nav.addEventListener("pointerdown", e => {
@@ -156,6 +160,12 @@ export function createDock(ctx, nav) {
   function refresh(dueN) {
     // Die Ausrichtung ist eine Option (Aussehen): die Klasse am body schaltet CSS und Achse um
     const v = !!ctx.opt("dockV", false); if (v !== isV()) { document.body.classList.toggle("dock-v", v); fitLabels(); place(); }
+    const st = stay(), open = nav.classList.contains("open");
+    if (st !== document.body.classList.contains("dock-stay")) {
+      document.body.classList.toggle("dock-stay", st);
+      if (st) { knob.classList.add("mid"); if (!open) setOpen(true, true); }
+      else if (open) setOpen(false); // Option gerade aus: Pille fällt, Knopf kommt zurück
+    } else if (st && !open) setOpen(true, true);
     const cur = items[current()];
     items.forEach(b => b.setAttribute("aria-current", b === cur ? "page" : "false"));
     const bd = document.getElementById("badge"); if (bd) { bd.textContent = dueN; bd.hidden = !dueN; }

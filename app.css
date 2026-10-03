@@ -195,6 +195,30 @@ body.dock-v nav button{top:50%;left:0;width:100%;height:76px;margin:-38px 0 0}
 .famrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:4px}
 .famh{width:100%;font-size:.78rem;color:var(--muted);font-weight:600}
 .famchip{font:inherit;font-family:var(--de);font-size:.95rem;padding:5px 12px;border-radius:999px;border:1px solid var(--rim);background:var(--glass-strong);color:var(--ink);cursor:pointer}
+.famchip.dim{color:var(--muted)}
+/* Wortformen: eine Zeile je Form mit Wortart; die gelernte Form (on) im Akzent */
+.forms{display:flex;flex-direction:column;gap:4px;margin-top:4px}
+.form{all:unset;cursor:pointer;display:flex;align-items:center;gap:10px;padding:6px 12px;border-radius:14px;border:1px solid var(--rim);background:var(--glass-strong);font-family:var(--de);font-size:.98rem}
+.form.on{box-shadow:inset 0 0 0 2px var(--accent)}
+.form .pos{font-family:var(--ui);font-size:.72rem;font-weight:600;color:var(--muted);min-width:4.2em}
+.form:focus-visible{outline:3px solid var(--accent)}
+/* Das Plus im Kopf und das Eingabeblatt darunter: Glas, über allem, mit Rand für die Ansicht */
+.plus{all:unset;cursor:pointer;position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);inset-inline-end:16px;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:var(--accent);z-index:7;-webkit-tap-highlight-color:transparent;
+  background:var(--glass-strong);border:1px solid var(--rim);box-shadow:inset 0 1px 0 var(--shine),0 8px 24px -12px var(--shadow);-webkit-backdrop-filter:blur(24px) saturate(170%);backdrop-filter:blur(24px) saturate(170%)}
+.plus svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round}
+.plus:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.sheet{position:fixed;top:calc(env(safe-area-inset-top,0px) + 62px);left:12px;right:12px;max-height:calc(100% - env(safe-area-inset-top,0px) - 150px);overflow:auto;padding:14px;border-radius:24px;z-index:7;
+  background:var(--glass-strong);border:1px solid var(--rim);box-shadow:inset 0 1px 0 var(--shine),0 20px 50px -20px var(--shadow);-webkit-backdrop-filter:blur(28px) saturate(170%);backdrop-filter:blur(28px) saturate(170%)}
+.sheethead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.sheethead h2{margin:0;font-size:1.05rem}
+.sheet .x{all:unset;cursor:pointer;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-size:1.4rem;color:var(--muted);border:1px solid var(--rim)}
+.sheet .x:focus-visible{outline:3px solid var(--accent)}
+.sheet .kind{margin:4px 0 2px}
+body.sheet-open .plus{opacity:.5}
+/* Dock immer sichtbar: die Ansicht lässt der offenen Pille Platz, der Knopf ist weg */
+body.dock-stay .knob{display:none}
+body.dock-stay main{padding-bottom:100px}
+body.dock-stay.dock-v main{padding-bottom:0;padding-inline-end:96px}
 .list li.sub{margin-inline-start:22px;margin-top:-4px}
 .list li.infam::after{content:"";position:absolute;inset-inline-start:0;top:0;bottom:0;width:3px;background:var(--g);opacity:.5}
 .search{width:100%;font:inherit;padding:12px 16px;border-radius:16px;color:var(--ink);outline:none;margin:2px 0 4px;background:var(--glass);border:1px solid var(--rim);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);-webkit-appearance:none;appearance:none}

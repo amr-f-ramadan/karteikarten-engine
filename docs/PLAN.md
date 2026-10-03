@@ -64,6 +64,7 @@ src/
     dom.js       $, html helpers (speakBtn, wordHTML, chip, dots), flash, hold
     router.js    mode, render(), action registry (data-act → handler)
     listing.js   what the word and phrase lists share (collapse threshold, closed topics, search filter, row actions)
+    addsheet.js  the "+" and the sheet: one input, Gemini classifies word or phrase, preview per kind, waitlist
     views/       learn.js, quiz.js, list.js (words), phrases.js (own tab), practice.js, settings.js (four groups)
   main.js      bootstrap: config, state, wiring
 build.mjs      esbuild → app.js (iife); --check verifies app.js matches src

@@ -7,14 +7,15 @@ export class CardStore {
   touch() { this._i = null; }
   get idx() {
     if (this._i) return this._i;
-    const words = [], phrases = [], nouns = [], byId = new Map(), byFam = new Map(), byWord = new Set(), bySrc = new Set(), byPk = new Set();
+    const words = [], phrases = [], nouns = [], byId = new Map(), byFam = new Map(), byWord = new Set(), bySrc = new Set(), byPk = new Set(), wordCard = new Map();
     for (const c of this.all) {
       byId.set(c.id, c); byWord.add(c.w.toLowerCase()); byPk.add(pk(c.w)); if (c.src) bySrc.add(c.src);
+      if (!wordCard.has(wordKey(c.w))) wordCard.set(wordKey(c.w), c);
       if (isP(c)) { phrases.push(c); continue; }
       words.push(c); if (isNoun(c)) nouns.push(c);
       const k = famKey(c), f = byFam.get(k); if (f) f.push(c); else byFam.set(k, [c]);
     }
-    return (this._i = { words, phrases, nouns, byId, byFam, byWord, bySrc, byPk });
+    return (this._i = { words, phrases, nouns, byId, byFam, byWord, bySrc, byPk, wordCard });
   }
   get words() { return this.idx.words; }
   get phrases() { return this.idx.phrases; }
@@ -33,12 +34,18 @@ export class CardStore {
   phraseGroups() { return [...new Set(this.phrases.map(c => c.cat).filter(Boolean))].join(", "); }
   /* Schon vorhanden? Wörter ohne Artikel verglichen, Wendungen ohne Satzzeichen */
   exists(w) { return this.idx.byWord.has(wordKey(w)); }
+  /* Die Karte zu einem Wort (mit oder ohne Artikel), z. B. für ein Synonym, das schon in der Liste ist */
+  find(w) { return this.idx.wordCard.get(wordKey(w)) || null; }
   existsP(w) { return this.idx.byPk.has(pk(w)); }
   /* Wartelisten-Eintrag erledigt: das Wort oder seine Quelle (src) ist in der Liste */
   isDone(k) { return this.idx.byWord.has(k) || this.idx.bySrc.has(k); }
   /* Suchtext einer Karte, einmal gebaut */
-  hay(c) { let h = this._hay.get(c); if (h === undefined) { h = norm([fullWord(c), c.ar, c.en, c.hint, c.def, c.ex, c.tr, c.cat, c.fam, c.perf].join(" ")); this._hay.set(c, h); } return h; }
+  hay(c) { let h = this._hay.get(c); if (h === undefined) { h = norm([fullWord(c), c.ar, c.en, c.hint, c.def, c.ex, c.tr, c.cat, c.fam, c.perf, c.syn].concat((c.forms || []).map(f => f.w + " " + f.ar + " " + (f.en || ""))).join(" ")); this._hay.set(c, h); } return h; }
   push(c) { this.all.push(c); this.touch(); }
+  /* Eine Karte durch ihre neue Fassung ersetzen (gleiche id, gleicher Platz) */
+  replace(c) { const i = this.all.findIndex(x => x.id === c.id); if (i < 0) return false; this.all[i] = c; this.touch(); return true; }
+  /* Familien mit mehr als einer Karte, in Listenreihenfolge */
+  multiFamilies() { return [...this.idx.byFam.values()].filter(f => f.length > 1); }
   /* Felder einer Karte ändern (id, Wort und Art bleiben: die Indizes gelten weiter, nur der Suchtext nicht) */
   patch(id, fields) { const c = this.byId(id); if (!c) return false; Object.assign(c, fields); this._hay.delete(c); return true; }
   remove(id) { const i = this.all.findIndex(c => c.id === id); if (i >= 0) this.all.splice(i, 1); this.touch(); return i >= 0; }

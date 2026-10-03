@@ -5,10 +5,10 @@ import { slug, sameStem, topicOf, norm, pk, pkey, fullWord, fill, today } from "
 import { INT, recordAnswer, freshCards, dueCards, newToday, allowMoreNew, boxOf } from "../../src/core/leitner.js";
 import { emptyP, merge, prune } from "../../src/core/progress.js";
 import { CardStore } from "../../src/core/store.js";
-import { cardPrompt, cardSchema, phrasePrompt, starterPrompt, enPrompt, EN_SCHEMA } from "../../src/core/prompt.js";
+import { cardPrompt, cardSchema, phrasePrompt, starterPrompt, enPrompt, EN_SCHEMA, anyPrompt, anySchema, goodAny, fillPrompt, fillSchema } from "../../src/core/prompt.js";
 import { diffHTML } from "../../src/core/diff.js";
 import { parseCards, serializeCards, appendCards } from "../../src/core/cardsfile.js";
-import { freeId, shapeCard, withEn } from "../../src/core/newcard.js";
+import { freeId, shapeCard, withEn, withFields, mergeFamily, guessPos, pickFace, faceOf } from "../../src/core/newcard.js";
 import { nearestTurn, settleTarget, glideDuration } from "../../src/core/dock.js";
 import { RECENT, nounWeight, pickNoun } from "../../src/core/quiz.js";
 
@@ -94,7 +94,7 @@ test("card store: indexes, families in list order, lookups", () => {
   assert.equal(st.phraseGroups(), "Füllwort");
   assert.ok(st.exists("die Miete")); assert.ok(!st.exists("Mieter"));
   assert.ok(st.existsP("also ich denke dass")); assert.ok(st.isDone("miete"));
-  assert.equal(st.hay(st.byId("blick")), "der blick نظرة    ein blick.  wohnen blick ", "the English meaning has its slot after the Arabic one");
+  assert.equal(st.hay(st.byId("blick")).replace(/\s+/g, " ").trim(), "der blick نظرة ein blick. wohnen blick");
   st.push({ id: "neu", g: "x", w: "neu", cat: "Geld", ar: "", ex: "", fam: "blick" });
   assert.deepEqual(st.family(st.byId("blick")).map(c => c.id), ["blick", "ausblick", "neu"], "indexes rebuild after push");
   assert.ok(st.remove("neu")); assert.equal(st.byId("neu"), null);
@@ -198,7 +198,49 @@ test("english meaning: shaped after ar, added to an old card in place, asked for
   assert.equal(withEn(old, "glance").en, "glance");
   assert.deepEqual(Object.keys(withEn({ id: "x", w: "x" }, "e")), ["id", "w", "en"], "without ar it goes last");
   const p = enPrompt({ intro: "I", en: "en: short English", end: "E" }, [old, { id: "alsoich", k: "p", g: "x", w: "Also …", ar: "يعني" }]);
-  assert.equal(p, 'I\nErgänze für jede Karte nur das Feld en und gib ihre id unverändert zurück.\n- en: short English\nKarten:\n{"id":"blick","w":"der Blick","ar":"نظرة"}\n{"id":"alsoich","w":"Also …","ar":"يعني"}\nE');
+  assert.equal(p, 'I\nErgänze für jede Karte nur die Felder en und gib ihre id unverändert zurück.\n- en: short English\nKarten:\n{"id":"blick","w":"der Blick","ar":"نظرة"}\n{"id":"alsoich","w":"Also …","ar":"يعني"}\nE');
   assert.deepEqual(EN_SCHEMA.items.required, ["id", "en"]);
   st.patch("blick", { en: "glance" }); assert.ok(st.hay(st.byId("blick")).includes("glance"), "the search text knows the English meaning");
+});
+
+test("synonyms, forms, one prompt for both kinds, fill and family merge", () => {
+  const st = new CardStore(cards()), F = ["w", "g", "hint", "ar", "en", "ex", "note", "syn", "forms", "fam", "cat"];
+  const gen = { w: "empfinden", g: "x", hint: "", ar: "يحس", en: "to feel", ex: "E", note: "", syn: "fühlen, spüren", fam: "empfinden", cat: "Gefühle",
+    forms: [{ w: "Empfindung", g: "die", pos: "n", ar: "إحساس", en: "sensation" }, { w: "empfindlich", g: "x", pos: "adj", ar: "حساس", en: "sensitive" }, { w: "empfinden", g: "x", pos: "v", ar: "x" }, { w: "", g: "x", pos: "v", ar: "x" }] };
+  const o = shapeCard(gen, { id: "empfinden", fields: F, newCat: "Neu", store: st });
+  assert.deepEqual(Object.keys(o), ["id", "g", "w", "cat", "hint", "ar", "en", "ex", "syn", "forms"], "syn and forms after ex (no family of its own word yet)");
+  assert.equal(o.forms.length, 2, "the word itself and an empty form are dropped");
+  assert.deepEqual(o.forms[0], { w: "Empfindung", g: "die", pos: "n", ar: "إحساس", en: "sensation" });
+  assert.equal(shapeCard(Object.assign({}, gen, { syn: " ", forms: [] }), { id: "x", fields: F, newCat: "N", store: st }).syn, "", "an empty syn is kept: the card was asked");
+  assert.deepEqual(shapeCard(Object.assign({}, gen, { forms: [] }), { id: "x", fields: F, newCat: "N", store: st }).forms, [], "an empty forms list is kept too");
+  assert.equal(cardSchema(F).required.includes("syn"), false); assert.equal(cardSchema(F).properties.forms.items.properties.en.type, "STRING");
+  assert.deepEqual(guessPos("sich verlassen auf", "x"), "v"); assert.equal(guessPos("zwingend", "x"), "adj"); assert.equal(guessPos("Abwesenheit", "die"), "n");
+  // one request for word or phrase
+  const C = { fields: ["w", "g", "ar", "fam"], rules: { intro: "I", w: "W", g: "G", ar: "A", fam: "F {fams}", end: "E" }, phrases: { fields: ["w", "ar", "cat"], rules: { w: "PW", ar: "PA", cat: "PC {groups}" } } };
+  const p = anyPrompt(C, "Haus", { fams: "a", topics: "t", groups: "g1" });
+  assert.equal(p, 'I\nEingabe: "Haus"\nEntscheide zuerst: kind "w" für ein einzelnes Wort oder einen kurzen Ausdruck mit Grundform, kind "p" für eine feste Wendung, einen Satzanfang oder ein Füllwort. Fülle nur die Felder dieser Art.\nWenn kind w, Regeln:\n- W\n- G\n- A\n- F a\nWenn kind p, Regeln:\n- PW\n- PA\n- PC g1\nE');
+  const sch = anySchema(C.fields, C.phrases.fields);
+  assert.deepEqual(Object.keys(sch.properties), ["kind", "w", "g", "ar", "fam", "cat"]); assert.deepEqual(sch.required, ["kind", "w", "ar", "ex"]);
+  assert.ok(goodAny({ kind: "p", w: "x", ar: "y", ex: "z" }) && !goodAny({ kind: "q", w: "x", ar: "y", ex: "z" }));
+  // fill prompt and schema
+  const fp = fillPrompt({ intro: "I", en: "EN", syn: "SY", forms: "FO", end: "E" }, ["en", "syn", "forms"], [{ id: "a", g: "der", w: "Blick", ar: "ن" }]);
+  assert.equal(fp, 'I\nErgänze für jede Karte nur die Felder en, syn, forms und gib ihre id unverändert zurück.\n- EN\n- SY\n- FO\nKarten:\n{"id":"a","w":"der Blick","ar":"ن"}\nE');
+  assert.deepEqual(fillSchema(["en", "syn", "forms"], F).items.required, ["id", "en"]);
+  // fields land in their slots
+  const old = { id: "blick", g: "der", w: "Blick", cat: "Wohnen", ar: "نظرة", ex: "E", tr: "T", note: "N", fam: "blick" };
+  assert.deepEqual(Object.keys(withFields(old, { en: "glance", syn: "Sicht", forms: [{ w: "blicken", g: "x", pos: "v", ar: "ينظر" }] })), ["id", "g", "w", "cat", "ar", "en", "ex", "tr", "syn", "forms", "note", "fam"]);
+  assert.deepEqual(Object.keys(withFields({ id: "x", w: "x", ar: "a", ex: "e" }, { forms: [{ w: "y" }], syn: "", en: undefined })), ["id", "w", "ar", "ex", "syn", "forms"], "empty syn is kept, undefined is not, forms after syn");
+  // family merge: the stem is the base, the others become forms, the best progress is kept
+  const fam = [{ id: "empfindlich", g: "x", w: "empfindlich", ar: "حساس", en: "sensitive", ex: "1", fam: "empfinden" }, { id: "empfinden", g: "x", w: "empfinden", ar: "يحس", ex: "2", fam: "empfinden" }, { id: "empfindung", g: "die", w: "Empfindung", ar: "إحساس", ex: "3", fam: "empfinden" }];
+  const m = mergeFamily(fam, { empfindlich: { b: 3, due: 9, t: 1 }, empfinden: { b: 1, due: 5, t: 1 }, empfindung: { b: 3, due: 7, t: 1 } });
+  assert.equal(m.base.id, "empfinden"); assert.deepEqual(m.removed, ["empfindlich", "empfindung"]);
+  assert.deepEqual(m.base.forms.map(f => [f.w, f.g, f.pos]), [["empfindlich", "x", "adj"], ["Empfindung", "die", "n"]]);
+  assert.deepEqual(m.entry, { b: 3, due: 7, t: 1 }, "highest box, earliest due");
+  const w = mergeFamily([{ id: "a", g: "x", w: "sich zur Wehr setzen", ar: "1", ex: "", fam: "wehren" }, { id: "b", g: "x", w: "sich wehren", ar: "2", ex: "", fam: "wehren" }]);
+  assert.equal(w.base.id, "b", "the shortest word containing the stem"); assert.equal(w.base.forms[0].pos, "v"); assert.equal(w.entry, null);
+  // which face is learned
+  const c = { w: "empfinden", forms: [{ w: "Empfindung" }, { w: "empfindlich" }] };
+  assert.equal(pickFace(c, 0.2), 0); assert.equal(pickFace(c, 0.5), 1); assert.equal(pickFace(c, 0.99), 2); assert.equal(pickFace({ w: "x" }, 0.9), 0);
+  assert.equal(faceOf(c, 2).w, "empfindlich"); assert.equal(faceOf(c, 0), c);
+  st.replace(Object.assign({}, st.byId("blick"), { syn: "Schau" })); assert.ok(st.hay(st.byId("blick")).includes("schau"), "the search text knows synonyms after a replace");
 });

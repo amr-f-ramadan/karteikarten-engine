@@ -32,6 +32,8 @@ export function listActions(ctx) {
   return {
     actions: {
       open: el => { S.list.open = S.list.open === el.dataset.id ? null : el.dataset.id; ctx.render(); },
+      /* Ein Synonym, das in der Liste ist: seine Zeile öffnen und hinscrollen */
+      goto: el => { S.list.open = el.dataset.id; ctx.render(); const row = document.querySelector(`.row[data-id="${el.dataset.id}"]`); if (row) row.scrollIntoView({ block: "center" }); },
       topic: el => { const sec = el.closest(".topic"), c = S.list.closed[kindOf(S)]; if (!sec || !c) return; const t = sec.dataset.topic; if (c.has(t)) c.delete(t); else c.add(t); sec.classList.toggle("closed", c.has(t)); }
     },
     input: { q: el => { S.list.query = el.value; applyFilter(S, kindOf(S)); } },

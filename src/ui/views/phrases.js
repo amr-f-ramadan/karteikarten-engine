@@ -1,47 +1,16 @@
-// Wendungen (Redemittel): eigene Ansicht mit eigener Liste nach Verwendungszweck, eigenem Eingabefeld, Grundstock von Gemini.
+// Wendungen (Redemittel): eigene Ansicht mit eigener Liste nach Verwendungszweck und dem Grundstock von Gemini; neue Wendungen
+// entstehen im Eingabeblatt (addsheet).
 import { esc, pk, gClass } from "../../core/text.js";
 import { boxOf, learnedCount } from "../../core/leitner.js";
 import { goodPhrase } from "../../core/prompt.js";
-import { $, hold, SLOW_MS } from "../dom.js";
-import { dots, field, topicSection, searchBox, waitChips, exRow, trLine, noteBox, meaningLines, meaningMode } from "../parts.js";
-import { emptyAdd } from "../../state.js";
+import { hold, SLOW_MS } from "../dom.js";
+import { dots, topicSection, searchBox, exRow, trLine, noteBox, meaningLines, meaningMode } from "../parts.js";
 import { COLLAPSE_AT, closedSet, listActions } from "../listing.js";
 
 export function createPhrasesView(ctx) {
   const { S, T, C, store, vocab, session, flash } = ctx, PH = C.phrases;
   const gemErr = e => (e.message === "key" ? T("keyBad") : null);
 
-  async function doPGen() {
-    const el = $("#np"); if (el) S.pad.word = el.value.trim();
-    const A = S.pad;
-    if (!A.word || A.busy) return;
-    if (!S.gkey) { A.msg = T("needKey"); ctx.render(); return; }
-    if (store.existsP(A.word)) { A.msg = T("phDup"); ctx.render(); return; }
-    A.busy = "gen"; A.msg = ""; hold(true, SLOW_MS); ctx.render();
-    try {
-      A.card = await vocab.genPhrase(A.word);
-      if (store.existsP(A.card.w)) { A.msg = T("phDup"); A.card = null; A.word = ""; }
-    } catch (e) {
-      if (gemErr(e)) A.msg = gemErr(e);
-      else { vocab.queueWord(A.word, "p"); A.msg = T("phQueued"); A.word = ""; }
-    }
-    A.busy = false; hold(false); ctx.render();
-  }
-  async function doPSave() {
-    const A = S.pad;
-    if (A.busy) return;
-    const v = id => { const el = $("#" + id); return el ? el.value.trim() : ""; };
-    const card = { w: v("pf_w"), ar: v("pf_ar"), en: v("pf_en"), ex: v("pf_ex"), tr: v("pf_tr"), note: v("pf_note"), cat: v("pf_cat") };
-    A.card = card;
-    if (!card.w || !card.ar || !card.ex) return;
-    if (!S.sync.token) { A.msg = T("needTok"); ctx.render(); return; }
-    A.busy = "save"; hold(true, SLOW_MS); ctx.render();
-    try {
-      const [o] = await vocab.savePhrases([card]);
-      store.push(o); S.pad = emptyAdd(); flash(T("saved")); session.refill();
-    } catch (e) { A.msg = T("genFail") + " (" + e.message + ")"; }
-    S.pad.busy = false; hold(false); ctx.render();
-  }
   async function doStarter() {
     const A = S.pad;
     if (A.busy) return;
@@ -58,19 +27,11 @@ export function createPhrasesView(ctx) {
     A.busy = false; hold(false); ctx.render();
   }
 
-  function renderAdd() {
-    const A = S.pad, c = A.card;
-    return `<section class="add">
-      <h2>${T("phAddH")}</h2>
-      <div class="addrow"><input id="np" dir="auto" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${esc(T("phAddPh"))}" value="${esc(A.word)}">
-      <button class="btn ok" data-act="pgen" ${A.busy ? "disabled" : ""}>${A.busy === "gen" ? T("genBusy") : T("gen")}</button></div>
-      ${A.msg ? `<p class="addmsg">${esc(A.msg)}</p>` : ""}
-      ${waitChips(vocab.waiting("p"), T)}
-      ${c ? `<div class="preview">${field("pf_w", T("phF_w"), c.w)}${field("pf_ar", T("f_ar"), c.ar)}${PH.fields.includes("en") ? field("pf_en", T("f_en"), c.en) : ""}${field("pf_ex", T("f_ex"), c.ex, 1)}${PH.fields.includes("tr") ? field("pf_tr", T("f_tr"), c.tr, 1) : ""}${field("pf_note", T("f_note"), c.note, 1)}${field("pf_cat", T("phF_cat"), c.cat)}
-        <div class="row2"><button class="btn" data-act="pdiscard">${T("discard")}</button><button class="btn" data-act="pgen">${T("regen")}</button></div>
-        <button class="btn ok wide" data-act="psave" ${A.busy ? "disabled" : ""}>${A.busy === "save" ? T("saving") : T("saveCard")}</button></div>` : ""}
-      ${store.phrases.length < 10 ? `<div class="starter"><p class="dim">${T("phStarterHelp")}</p><button class="btn wide" data-act="pstart" ${A.busy ? "disabled" : ""}>${A.busy === "starter" ? T("phStarterBusy") : T("phStarter")}</button></div>` : ""}
-    </section>`;
+  /* Der Grundstock: solange die Liste klein ist, ein Knopf für 30 häufige Wendungen von Gemini */
+  function renderStarter() {
+    const A = S.pad;
+    if (store.phrases.length >= 10) return A.msg ? `<p class="addmsg">${esc(A.msg)}</p>` : "";
+    return `<section class="add starter">${A.msg ? `<p class="addmsg">${esc(A.msg)}</p>` : ""}<p class="dim">${T("phStarterHelp")}</p><button class="btn wide" data-act="pstart" ${A.busy ? "disabled" : ""}>${A.busy === "starter" ? T("phStarterBusy") : T("phStarter")}</button></section>`;
   }
   function render() {
     const all = store.phrases, groups = new Map();
@@ -84,18 +45,11 @@ export function createPhrasesView(ctx) {
     });
     const closed = all.length > COLLAPSE_AT ? closedSet(S, "p", [...groups.keys()]) : null;
     const secs = [...groups.entries()].map(([t, rows]) => topicSection(t, rows, closed ? closed.has(t) : null)).join("");
-    return `${renderAdd()}${all.length ? searchBox(S.list.query, T) + `<p class="meta">${T("phStat").replace("{a}", learnedCount(all, S.P)).replace("{t}", all.length)}</p>` : ""}${secs}<p id="nohits" class="meta dim" hidden>${T("noHits")}</p>`;
+    return `${renderStarter()}${all.length ? searchBox(S.list.query, T) + `<p class="meta">${T("phStat").replace("{a}", learnedCount(all, S.P)).replace("{t}", all.length)}</p>` : ""}${secs}<p id="nohits" class="meta dim" hidden>${T("noHits")}</p>`;
   }
   const shared = listActions(ctx);
   return {
     mode: "phrases", render, enter: shared.enter, after: shared.after, input: shared.input,
-    actions: Object.assign({
-      pgen: () => { const w = $("#np"); if (w && S.pad.card && !w.value.trim()) w.value = S.pad.word; doPGen(); },
-      psave: doPSave,
-      pdiscard: () => { S.pad = emptyAdd(); ctx.render(); },
-      pstart: doStarter,
-      del: el => vocab.deleteCard(el.dataset.id)
-    }, shared.actions),
-    keys(e) { if (e.target.id === "np" && e.key === "Enter") { e.preventDefault(); doPGen(); } }
+    actions: Object.assign({ pstart: doStarter, del: el => vocab.deleteCard(el.dataset.id) }, shared.actions)
   };
 }

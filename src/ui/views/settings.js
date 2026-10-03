@@ -61,10 +61,11 @@ export function createSettingsView(ctx) {
       <label class="chk"><input id="gvo" type="checkbox" ${ctx.opt("gvoice", true) ? "checked" : ""}> ${T("gvoice")}</label>
       <label class="chk"><input id="slw" type="checkbox" ${ctx.opt("slow", false) ? "checked" : ""}> ${T("slow")}</label>`;
   }
-  const renderStyle = () => `<label class="chk"><input id="dkv" type="checkbox" ${ctx.opt("dockV", false) ? "checked" : ""}> ${T("dockVert")}</label>`;
+  const renderStyle = () => `<label class="chk"><input id="dkv" type="checkbox" ${ctx.opt("dockV", false) ? "checked" : ""}> ${T("dockVert")}</label>
+      <label class="chk"><input id="dks" type="checkbox" ${ctx.opt("dockStay", false) ? "checked" : ""}> ${T("dockStay")}</label>`;
   function renderData() {
-    const missing = vocab.missingEn().length;
-    return `${missing ? `<button class="btn wide" data-act="fillen" ${S.fill.busy ? "disabled" : ""}>${S.fill.busy ? T("fillEnBusy") : T("fillEn").replace("{n}", missing)}</button>` : ""}
+    const missing = vocab.fillCount();
+    return `${missing ? `<button class="btn wide" data-act="fillen" ${S.fill.busy ? "disabled" : ""}>${S.fill.busy ? T("fillBusy") : T("fill").replace("{n}", missing)}</button>` : ""}
       <h3>${T("backupH")}</h3>
       <div class="row2"><button class="btn" data-act="export">${T("export")}</button>
       <label class="btn filebtn">${T("import")}<input id="imp" type="file" accept="application/json,.json"></label></div>
@@ -93,14 +94,14 @@ export function createSettingsView(ctx) {
       savegem: () => { const v = ($("#gem").value || "").trim(); if (!v) return; S.gkey = v; local.set(GK, v); flash(T("gemSet")); ctx.render(); },
       delgem: () => { S.gkey = ""; local.remove(GK); ctx.render(); },
       reset: () => { if (confirm(T("resetQ"))) { S.P = Object.assign(emptyP(), { opts: S.P.opts }); ctx.changed(); session.restart(); } },
-      /* Einmalig: englische Bedeutungen für alle Karten ohne en, mit dem Gemini-Key und dem Token vom Gerät; hält die App so lange */
+      /* Einmalig: fehlende Felder für alle Karten und Familien zusammenlegen, mit dem Gemini-Key und dem Token vom Gerät; hält die App so lange */
       fillen: async () => {
         if (S.fill.busy) return;
         if (!S.gkey) { flash(T("needKey")); return; }
         if (!S.sync.token) { flash(T("needTok")); return; }
-        S.fill.busy = true; hold(true, 180000); ctx.render();
-        try { flash(T("fillEnDone").replace("{n}", await vocab.fillEn())); }
-        catch (e) { flash(e.message === "key" ? T("keyBad") : T("fillEnFail")); }
+        S.fill.busy = true; hold(true, 300000); ctx.render();
+        try { flash(T("fillDone").replace("{n}", await vocab.fill())); }
+        catch (e) { flash(e.message === "key" ? T("keyBad") : T("fillFail")); }
         S.fill.busy = false; hold(false); ctx.render();
       }
     },
@@ -113,6 +114,7 @@ export function createSettingsView(ctx) {
       gvo: el => ctx.setOpt("gvoice", el.checked),
       pda: el => ctx.setOpt("prodAuto", el.checked),
       mlang: el => ctx.setOpt("meaning", el.value),
+      dks: el => { ctx.setOpt("dockStay", el.checked); ctx.render(); },
       dkv: el => { ctx.setOpt("dockV", el.checked); ctx.render(); } // das Dock liest die Option beim Zeichnen
     }
   };
