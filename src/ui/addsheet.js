@@ -79,6 +79,8 @@ export function createAddSheet(ctx) {
   }
   return {
     render,
+    // Beim Wechsel der Ansicht geht das Blatt zu; der Entwurf bleibt für das nächste Öffnen
+    leave() { S.add.open = false; },
     actions: {
       addopen: () => { S.add.open = true; ctx.render(); const el = $("#nw"); if (el && !S.add.card) el.focus(); },
       addclose: () => { S.add.open = false; ctx.render(); },

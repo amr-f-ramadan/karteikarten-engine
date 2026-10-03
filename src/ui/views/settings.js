@@ -2,6 +2,7 @@
 import { today, hhmm } from "../../core/text.js";
 import { emptyP, merge } from "../../core/progress.js";
 import { $, hold } from "../dom.js";
+import { fillButton } from "../parts.js";
 
 export function createSettingsView(ctx) {
   const { S, T, C, local, github, push, session, flash, vocab } = ctx, PH = C.phrases || null;
@@ -64,8 +65,7 @@ export function createSettingsView(ctx) {
   const renderStyle = () => `<label class="chk"><input id="dkv" type="checkbox" ${ctx.opt("dockV", false) ? "checked" : ""}> ${T("dockVert")}</label>
       <label class="chk"><input id="dks" type="checkbox" ${ctx.opt("dockStay", false) ? "checked" : ""}> ${T("dockStay")}</label>`;
   function renderData() {
-    const missing = vocab.fillCount();
-    return `${missing ? `<button class="btn wide" data-act="fillen" ${S.fill.busy ? "disabled" : ""}>${S.fill.busy ? T("fillBusy") : T("fill").replace("{n}", missing)}</button>` : ""}
+    return `${fillButton(vocab.fillCount(), S.fill.busy, T)}
       <h3>${T("backupH")}</h3>
       <div class="row2"><button class="btn" data-act="export">${T("export")}</button>
       <label class="btn filebtn">${T("import")}<input id="imp" type="file" accept="application/json,.json"></label></div>

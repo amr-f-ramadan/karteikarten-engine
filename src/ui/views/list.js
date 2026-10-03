@@ -2,7 +2,7 @@
 // ihre eigene Ansicht.
 import { esc, fullWord, topicOf, gClass } from "../../core/text.js";
 import { boxOf, learnedCount } from "../../core/leitner.js";
-import { wordHTML, dots, topicSection, searchBox, famRow, exRow, trLine, meaningLines, meaningMode, synRow, formsRow } from "../parts.js";
+import { wordHTML, dots, topicSection, searchBox, famRow, exRow, trLine, meaningLines, meaningMode, synRow, formsRow, fillButton } from "../parts.js";
 import { COLLAPSE_AT, closedSet, listActions } from "../listing.js";
 
 export function createListView(ctx) {
@@ -21,7 +21,8 @@ export function createListView(ctx) {
     });
     const words = store.words, closed = words.length > COLLAPSE_AT ? closedSet(S, "w", [...topics.keys()]) : null;
     const secs = [...topics.entries()].map(([t, rows]) => topicSection(t, rows, closed ? closed.has(t) : null)).join("");
-    return `${searchBox(S.list.query, T)}
+    // Solange alte Karten noch Felder brauchen oder Familien auf mehrere Karten verteilt sind, steht das Ergänzen auch hier, wo es auffällt
+    return `${fillButton(vocab.fillCount(), S.fill.busy, T)}${searchBox(S.list.query, T)}
       <p class="meta">${T("listStat").replace("{a}", learnedCount(words, S.P)).replace("{t}", words.length)}</p>${secs}<p id="nohits" class="meta dim" hidden>${T("noHits")}</p>`;
   }
   const shared = listActions(ctx);
