@@ -26,3 +26,14 @@ export const meaningBig = (c, mode) => (mode === "en" && c.en ? `<p class="en-bi
   : `<p class="ar-big">${esc(c.ar)}</p>${mode === "both" && c.en ? `<p class="en-big sub" lang="en" dir="ltr">${esc(c.en)}</p>` : ""}`);
 export const trLine = tr => (tr ? `<p class="tr" lang="ar" dir="rtl">${esc(tr)}</p>` : "");
 export const noteBox = note => (note ? `<p class="note">${note}</p>` : "");
+/* Synonyme als Chips: ein Wort, das in der Liste ist, bekommt die Aktion act (goto öffnet seine Karte, sayt spricht es); ein fremdes wird nur gesprochen */
+export const synRow = (c, store, T, act) => {
+  const items = (c.syn || "").split(",").map(s => s.trim()).filter(Boolean);
+  return items.length ? `<div class="famrow syn"><span class="famh">${T("synH")}</span>${items.map(s => { const hit = store.find(s); return hit
+    ? `<button class="famchip de ${gClass(hit)}" data-act="${act}" data-id="${hit.id}" data-t="${esc(fullWord(hit))}">${esc(s)}</button>`
+    : `<button class="famchip de g-x dim" data-act="sayt" data-t="${esc(s)}">${esc(s)}</button>`; }).join("")}</div>` : "";
+};
+const POS = { n: "posN", v: "posV", adj: "posAdj", adv: "posAdv" };
+/* Wortformen der Karte als Zeilen mit Wortart; die gerade gelernte (face) ist hervorgehoben */
+export const formsRow = (c, face, T) => (c.forms && c.forms.length ? `<div class="forms"><span class="famh">${T("formsH")}</span>${c.forms.map((f, i) =>
+  `<button class="form de ${gClass(f)}${face === i + 1 ? " on" : ""}" data-act="sayt" data-t="${esc(fullWord(f))}"><span class="pos">${T(POS[f.pos] || "posN")}</span> ${ART[f.g] ? `<span class="art">${ART[f.g]}</span> ` : ""}${esc(f.w)}</button>`).join("")}</div>` : "");

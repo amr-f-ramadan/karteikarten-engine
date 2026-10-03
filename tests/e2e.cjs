@@ -195,51 +195,74 @@ const toastOf = async (page, action) => {
   const runAmr = async variant => {
     const gh = makeGitHub("amr-f-ramadan/de-karteikarten", { "main:cards.js": amrCards });
     const gem = makeGemini();
-    gem.card = { w: "Kündigung", g: "die", hint: "Plural: die Kündigungen", perf: "", ar: "إنهاء عقد، استقالة", en: "notice, termination", def: "Das Beenden eines Vertrags.", ex: "Ich habe die <b>Kündigung</b> bekommen.", note: "", fam: "kündigen", cat: "Arbeit" };
+    gem.card = { kind: "w", w: "Kündigung", g: "die", hint: "Plural: die Kündigungen", perf: "", ar: "إنهاء عقد، استقالة", en: "notice, termination", def: "Das Beenden eines Vertrags.", ex: "Ich habe die <b>Kündigung</b> bekommen.", note: "", syn: "Entlassung", forms: [{ w: "kündigen", g: "x", pos: "v", ar: "يفسخ", en: "to cancel" }], fam: "kündigen", cat: "Arbeit" };
     const { ctx, page } = await newPage(browser, { storage: { "kk-amr-v2:gemini": "fake-key", "kk-amr-v2:token": "fake-token" } });
     await ctx.route("https://api.github.com/**", gh.handle);
     await ctx.route("https://generativelanguage.googleapis.com/**", gem.handle);
     await page.goto(`${ORIGIN}/${variant}/`);
     await sleep(2500);
-    await tab(page, "list");
+    // One sheet for everything: the plus opens it, Gemini decides the kind (mocked: a word here)
+    await page.click('[data-act="addopen"]');
     await page.fill("#nw", "Kündigung");
     await page.click('[data-act="gen"]');
     await page.waitForSelector(".preview", { timeout: 8000 });
-    const formIds = await page.$$eval(".preview [id]", els => els.map(e => e.id));
+    const formIds = await page.$$eval(".preview [id]", els => els.map(e => e.id)), kindTag = await page.textContent(".preview .kind");
     const selLabels = await page.$$eval("#f_g option", els => els.map(e => e.textContent));
     await toastOf(page, () => page.click('[data-act="savecard"]'));
     const put = gh.log.find(e => e.method === "PUT" && e.path.endsWith("/cards.js"));
     const saved = put && unb64(put.body.content);
     const run = { request: gem.calls[0] && gem.calls[0].body, formIds, selLabels, savedLine: saved && saved.slice(amrCards.lastIndexOf("\n];")), savedPrefixOk: !!saved && saved.startsWith(amrCards.slice(0, amrCards.lastIndexOf("\n];"))) };
+    // The same sheet with a phrase: Gemini answers kind p, the preview shows the phrase fields, the card lands among the phrases
+    const wordCard = gem.card;
+    gem.card = body => (body.contents[0].parts[0].text.includes('Eingabe: "Ich möchte') ? { kind: "p", w: "Ich möchte betonen, dass …", ar: "عايز أأكد إن", en: "I want to stress that", ex: "<b>Ich möchte betonen, dass</b> das wichtig ist.", note: "", cat: "Meinung sagen" } : wordCard);
+    await page.click('[data-act="addopen"]'); await page.fill("#nw", "Ich möchte betonen"); await page.click('[data-act="gen"]');
+    await page.waitForSelector(".preview", { timeout: 8000 });
+    const phraseAdd = { tag: await page.textContent(".preview .kind"), ids: await page.$$eval(".preview [id]", els => els.map(e => e.id)), sheetOpen: !(await page.$("#sheet[hidden]")) };
+    await toastOf(page, () => page.click('[data-act="savecard"]'));
+    const phrasePut = gh.log.filter(e => e.method === "PUT" && e.path.endsWith("/cards.js")).pop(), phraseLine = phrasePut && unb64(phrasePut.body.content).split("\n").find(l => l.includes('"id":"ichmoechtebetonendass"'));
+    phraseAdd.line = phraseLine; phraseAdd.closed = !!(await page.$("#sheet[hidden]"));
+    gem.card = wordCard;
     // The longest label ("Einstellungen") must fit inside the 88 px lens while its button is centred and enlarged
     await tab(page, "settings"); await page.click(".knob"); await page.waitForFunction(() => document.querySelector("nav").classList.contains("open")); await sleep(900);
     const label = await page.evaluate(() => { const l = document.querySelector("nav button.on .lbl"), r = document.createRange(); r.selectNodeContents(l); return { text: l.textContent, width: Math.round(r.getBoundingClientRect().width), size: getComputedStyle(l).fontSize }; });
     await page.keyboard.press("Escape");
-    // English meaning: option in the learning group, both meanings on the opened card; the one-time fill for the old cards asks
-    // Gemini in batches of twenty (mocked per batch) and rewrites cards.js with en after ar
+    // English meaning: option in the learning group, both meanings, synonyms and forms on the opened card; the one-time fill for
+    // the old cards asks Gemini in batches (mocked per batch), rewrites cards.js with en, syn and forms and merges the families
     await page.selectOption("#mlang", "both"); await sleep(100);
     await tab(page, "list"); await page.click('[data-act="open"][data-id="kuendigung"]'); await sleep(450);
-    const meaning = await page.evaluate(() => ({ ar: (document.querySelector(".detail .ar") || {}).textContent, en: (document.querySelector(".detail .en") || {}).textContent }));
+    const meaning = await page.evaluate(() => ({ ar: (document.querySelector(".detail .ar") || {}).textContent, en: (document.querySelector(".detail .en") || {}).textContent, syn: [...document.querySelectorAll(".detail .syn .famchip")].map(e => e.textContent), forms: [...document.querySelectorAll(".detail .form")].map(e => e.textContent.replace(/\s+/g, " ").trim()) }));
     await tab(page, "settings");
     const fillBtn = await page.$('[data-act="fillen"]'), fillText = fillBtn ? await fillBtn.textContent() : null;
     const card0 = gem.card;
-    gem.card = body => { const txt = body.contents[0].parts[0].text; return txt.includes("Feld en") ? [...txt.matchAll(/"id":"([^"]+)"/g)].map(m => ({ id: m[1], en: "EN " + m[1] })) : card0; };
+    gem.card = body => { const txt = body.contents[0].parts[0].text; return txt.includes("gib ihre id unverändert zurück") ? [...txt.matchAll(/"id":"([^"]+)"/g)].map(m => ({ id: m[1], en: "EN " + m[1], syn: "SYN " + m[1], forms: [{ w: "Form" + m[1], g: "die", pos: "n", ar: "ع", en: "form" }] })) : card0; };
     const fillToast = await toastOf(page, () => page.click('[data-act="fillen"]'));
     const fillPut = gh.log.filter(e => e.method === "PUT" && e.path.endsWith("/cards.js")).pop(), filled = fillPut ? unb64(fillPut.body.content) : "";
-    const fillCalls = gem.calls.filter(c => c.body.contents[0].parts[0].text.includes("Feld en")).length;
-    await tab(page, "list"); await page.click('.list .row'); await sleep(450);
-    const oldEn = await page.evaluate(() => (document.querySelector(".detail .en") || {}).textContent);
+    const fillCalls = gem.calls.filter(c => c.body.contents[0].parts[0].text.includes("gib ihre id unverändert zurück")).map(c => (c.body.contents[0].parts[0].text.match(/"id":"/g) || []).length);
+    await tab(page, "list"); await page.click('[data-act="open"][data-id="empfinden"]'); await sleep(450);
+    const merged = await page.evaluate(() => ({ en: (document.querySelector(".detail .en") || {}).textContent, forms: [...document.querySelectorAll(".detail .form")].map(e => e.textContent.replace(/\s+/g, " ").trim()), syn: document.querySelectorAll(".detail .syn .famchip").length, rows: document.querySelectorAll('.row[data-id="empfindlich"], .row[data-id="empfindung"]').length }));
     const errors = page.errors; await ctx.close();
-    return { run, errors, label, english: { meaning, fillText, fillToast, filled, fillCalls, oldEn } };
+    return { run, errors, label, phraseAdd, kindTag, english: { meaning, fillText, fillToast, filled, fillCalls, merged } };
   };
   const hash = run => require("crypto").createHash("sha256").update(JSON.stringify(run)).digest("hex");
   if (CAPTURE) { const { run } = await runAmr("amr-capture"); fs.writeFileSync(FIX + "/amr-expected.sha256", hash(run) + "\n"); console.log("captured tests/fixtures/amr-expected.sha256"); }
   const want = fs.readFileSync(FIX + "/amr-expected.sha256", "utf8").trim();
-  const { run: got, errors: amrErrors, label: amrLabel, english: amrEnglish } = await runAmr("de-karteikarten");
+  const { run: got, errors: amrErrors, label: amrLabel, english: amrEnglish, phraseAdd: amrPhrase, kindTag: amrKindTag } = await runAmr("de-karteikarten");
   check("Amr: the centred label 'Einstellungen' fits inside the lens", amrLabel.text === "Einstellungen" && amrLabel.width <= 84, amrLabel);
   const amrN = (amrCards.match(/^ \{/gm) || []).length, en = amrEnglish;
-  check("Amr: with 'both' the opened card shows the Arabic and the English meaning", en.meaning.ar === "إنهاء عقد، استقالة" && en.meaning.en === "notice, termination", en.meaning);
-  check("Amr: the one-time fill lists the old cards without English, asks Gemini in batches of twenty, writes en after ar into every line and shows it", en.fillText === `Englische Bedeutungen ergänzen (${amrN} Karten)` && en.fillToast === `${amrN} Karten ergänzt` && en.fillCalls === Math.ceil(amrN / 20) && (en.filled.match(/"ar":"[^"]*","en":"EN [^"]+"/g) || []).length === amrN && en.filled.includes('"en":"notice, termination"') && /^EN /.test(en.oldEn), { fillText: en.fillText, fillToast: en.fillToast, fillCalls: en.fillCalls, lines: (en.filled.match(/"en":"EN /g) || []).length, amrN, oldEn: en.oldEn });
+  check("Amr: the sheet shows the kind Gemini chose; a phrase gets the phrase fields and lands among the phrases, the sheet closes after saving", amrKindTag === "Wort" && amrPhrase.tag === "Wendung" && JSON.stringify(amrPhrase.ids) === JSON.stringify(["pf_w", "pf_ar", "pf_en", "pf_ex", "pf_note", "pf_cat"]) && amrPhrase.sheetOpen && amrPhrase.closed && !!amrPhrase.line && amrPhrase.line.includes('"k":"p"') && amrPhrase.line.includes('"en":"I want to stress that"'), { amrKindTag, amrPhrase });
+  check("Amr: with 'both' the opened card shows the Arabic and the English meaning, the synonym chip and the forms", en.meaning.ar === "إنهاء عقد، استقالة" && en.meaning.en === "notice, termination" && JSON.stringify(en.meaning.syn) === '["Entlassung"]' && JSON.stringify(en.meaning.forms) === '["Verb kündigen"]', en.meaning); // (the forms list is checked with a space between part of speech and word)
+  // The old list: words lack en, syn and forms; phrases lack en; six families have more than one card. The fill asks words in
+  // tens and phrases in twenties, writes the fields into every line and merges each family into its base card
+  const amrAll = amrCards.split("\n").filter(l => l.startsWith(" {")).map(l => JSON.parse(l.replace(/,$/, ""))), amrWords = amrAll.filter(c => c.k !== "p"), amrPhr = amrAll.filter(c => c.k === "p");
+  const fams = new Map(); amrWords.forEach(c => { const k = (c.fam || c.w).toLowerCase(); fams.set(k, (fams.get(k) || []).concat([c])); });
+  const multi = [...fams.entries()].filter(([, m]) => m.length > 1), bases = multi.map(([k, m]) => m.find(c => c.w.toLowerCase() === k) || m.filter(c => c.w.toLowerCase().includes(k)).sort((a, b) => a.w.length - b.w.length)[0] || m[0]);
+  const removedIds = multi.flatMap(([, m], i) => m.filter(c => c !== bases[i]).map(c => c.id)), expectN = amrWords.length + amrPhr.length + removedIds.length;
+  const filledAll = en.filled.split("\n").filter(l => l.startsWith(" {")).map(l => JSON.parse(l.replace(/,$/, ""))), filledById = new Map(filledAll.map(c => [c.id, c]));
+  const wordsFilled = amrWords.filter(c => !removedIds.includes(c.id)).every(c => { const f = filledById.get(c.id); return f && f.en === "EN " + c.id && f.syn === "SYN " + c.id && Array.isArray(f.forms) && f.forms.some(x => x.w === "Form" + c.id) && Object.keys(f).indexOf("en") === Object.keys(f).indexOf("ar") + 1; });
+  const phrFilled = amrPhr.every(c => { const f = filledById.get(c.id); return f && f.en === "EN " + c.id && !("syn" in f) && !("forms" in f); });
+  const mergedOk = bases.every((b, i) => { const f = filledById.get(b.id); return f && multi[i][1].filter(c => c !== b).every(c => f.forms.some(x => x.w === c.w)); }) && removedIds.every(id => !filledById.has(id));
+  check("Amr: the one-time fill names all cards it touches, asks words in tens and phrases in twenties, writes en, syn and forms into every word line (en after ar), only en into phrases, and merges the families", en.fillText === `Karten ergänzen: Englisch, Synonyme, Wortformen, Familien zusammenlegen (${expectN})` && en.fillToast === `${expectN} Karten ergänzt` && JSON.stringify(en.fillCalls) === JSON.stringify([...Array(Math.ceil(amrWords.length / 10)).keys()].map(i => Math.min(10, amrWords.length - i * 10)).concat([...Array(Math.ceil(amrPhr.length / 20)).keys()].map(i => Math.min(20, amrPhr.length - i * 20)))) && wordsFilled && phrFilled && multi.length >= 1 && mergedOk, { fillText: en.fillText, fillToast: en.fillToast, fillCalls: en.fillCalls, expectN, wordsFilled, phrFilled, families: multi.length, mergedOk });
+  check("Amr: after the fill the merged family card shows its English, its forms (Empfindung, empfindlich among them) and a synonym chip, the merged cards are gone from the list", /^EN /.test(en.merged.en) && en.merged.forms.some(f => /Empfindung/.test(f)) && en.merged.forms.some(f => /empfindlich/.test(f)) && en.merged.syn === 1 && en.merged.rows === 0, en.merged);
   if (process.env.DUMP_RUN) fs.writeFileSync(process.env.DUMP_RUN, JSON.stringify(got, null, 1));
   check("Amr: Gemini request, add form, article labels and saved card exactly as with his original engine", hash(got) === want, { formIds: got.formIds, savedLine: got.savedLine, promptStart: got.request && got.request.contents[0].parts[0].text.slice(0, 200) });
   check("Amr: no page errors", !amrErrors.length, amrErrors);
@@ -275,7 +298,7 @@ const toastOf = async (page, action) => {
     const syncState = await (async () => { await tab(page, "settings"); return page.textContent("#syncState"); })();
     check("Eman: sync status is Arabic 'متزامن'", syncState === "متزامن", syncState);
     const groups = await page.$$eval(".settings .grp .gh", els => els.map(e => e.textContent));
-    check("Eman: the settings come in four Arabic groups (functions, learning, look, data), no English option without the field", JSON.stringify(groups) === JSON.stringify(["الوظايف", "المذاكرة", "الشكل", "البيانات"]) && !!(await page.$("#dkv")) && !(await page.$("#mlang")) && !(await page.$('[data-act="fillen"]')), groups);
+    check("Eman: the settings come in four Arabic groups (functions, learning, look, data), no English option without the field", JSON.stringify(groups) === JSON.stringify(["الوظايف", "المذاكرة", "الشكل", "البيانات"]) && !!(await page.$("#dkv")) && !!(await page.$("#dks")) && !(await page.$("#mlang")) && !(await page.$('[data-act="fillen"]')), groups);
     await grab(page, "settings-with-token");
     const htmlAttrs = await page.evaluate(() => [document.documentElement.lang, document.documentElement.dir, document.title, document.querySelector("header h1").textContent, document.querySelector('meta[name="apple-mobile-web-app-title"]').content]);
     check("Eman: lang/dir/title/header/home-screen name unchanged", JSON.stringify(htmlAttrs) === JSON.stringify(["ar", "rtl", "كروت ألماني", "كلمات ألماني", "Deutsch"]), htmlAttrs);
@@ -371,6 +394,15 @@ const toastOf = async (page, action) => {
     await sleep(1500); const vBack = await knobXY();
     check("Eman: vertical dock: the knob rests in the corner, drives to the middle of the right edge, the pill grows up and down round it, a swipe down turns to the previous view, the knob comes back down", vCorner.vertical && vCorner.right <= 24 && vCorner.bottomGap <= 30 && vMid.right <= 24 && Math.abs(vMid.cy - 422) <= 3 && vPill.h > 300 && vPill.w <= 90 && Math.abs(vPill.cy - 422) <= 3 && vPill.right <= 20 && vPill.lblFit && vMode === "practice" && vBack.right === vCorner.right && vBack.cy === vCorner.cy, { vCorner, vMid, vPill, vMode, vBack });
     await tab(page, "settings"); await page.uncheck("#dkv"); await sleep(100);
+    // Always-visible dock: the pill stays open, the knob is gone, a pick switches without closing, nothing closes it until the option is off
+    await page.check("#dks"); await sleep(900);
+    const stayOn = await page.evaluate(() => ({ open: document.querySelector("nav").classList.contains("open"), knob: getComputedStyle(document.querySelector(".knob")).display, pad: getComputedStyle(document.querySelector("main")).paddingBottom }));
+    await page.click('nav button[data-mode="learn"]'); await page.waitForFunction(() => document.querySelector("nav button[aria-current=page]").dataset.mode === "learn", null, { timeout: 4000 }); await sleep(4200);
+    const stayPicked = await page.evaluate(() => ({ open: document.querySelector("nav").classList.contains("open"), card: !!document.querySelector("#card") }));
+    await page.click('nav button[data-mode="settings"]'); await page.waitForFunction(() => document.querySelector("nav button[aria-current=page]").dataset.mode === "settings", null, { timeout: 4000 }); await sleep(900);
+    await page.uncheck("#dks"); await sleep(1600);
+    const stayOff = await page.evaluate(() => ({ open: document.querySelector("nav").classList.contains("open"), knob: getComputedStyle(document.querySelector(".knob")).display }));
+    check("Eman: with 'dock always visible' the pill stays open without a knob, a pick switches the view and the pill stays; off again, it falls and the knob is back", stayOn.open && stayOn.knob === "none" && stayOn.pad === "100px" && stayPicked.open && stayPicked.card && !stayOff.open && stayOff.knob !== "none", { stayOn, stayPicked, stayOff });
     await tab(page, "learn");
 
     // Learn: front, flip animation, back with tr + family chips + topic
@@ -429,14 +461,14 @@ const toastOf = async (page, action) => {
     const gemToast = await toastOf(page, () => page.click('[data-act="savegem"]'));
     check("Eman: saving Gemini key shows Arabic toast", gemToast === "الـ Gemini key محفوظ", gemToast);
     await grab(page, "settings-gemini-set");
-    await tab(page, "list");
+    await tab(page, "list"); await page.click('[data-act="addopen"]'); await sleep(200);
     const phDir = await page.evaluate(() => getComputedStyle(document.querySelector("#nw")).direction);
     await page.fill("#nw", "umziehen");
     const typedDir = await page.evaluate(() => getComputedStyle(document.querySelector("#nw")).direction);
     const searchDir = await page.evaluate(() => getComputedStyle(document.querySelector("#q")).direction);
     check("Eman: empty inputs show Arabic placeholder right-to-left, typed German left-to-right", phDir === "rtl" && typedDir === "ltr" && searchDir === "rtl", { phDir, typedDir, searchDir });
     await page.fill("#nw", "");
-    gem.card = { w: "umziehen", g: "x", hint: "zieht um, zog um, ist umgezogen", ar: "يعزّل / ينقل", ex: "Wir <b>ziehen</b> nächsten Monat <b>um</b>.", tr: "هنعزّل الشهر الجاي.", note: "", fam: "ziehen", cat: "السكن" };
+    gem.card = { kind: "w", w: "umziehen", g: "x", hint: "zieht um, zog um, ist umgezogen", ar: "يعزّل / ينقل", ex: "Wir <b>ziehen</b> nächsten Monat <b>um</b>.", tr: "هنعزّل الشهر الجاي.", note: "", fam: "ziehen", cat: "السكن" };
     await page.fill("#nw", "umziehen"); await page.click('[data-act="gen"]');
     await page.waitForSelector(".preview", { timeout: 8000 });
     const req = gem.calls[gem.calls.length - 1].body;
@@ -444,7 +476,7 @@ const toastOf = async (page, action) => {
     check("Eman: prompt asks for Egyptian Arabic and her rules", /Ägypterin/.test(prompt) && /tr: die Übersetzung des Beispielsatzes auf Ägyptisch-Arabisch/.test(prompt) && !/- def:/.test(prompt) && !/- perf:/.test(prompt), prompt);
     // families are listed only when their stem matches the new word (none for "umziehen"), topics always
     check("Eman: prompt lists her Arabic topics, families only with a matching stem", prompt.includes("السكن") && prompt.includes("كلمات وتعبيرات مهمة") && /Wortfamilien: keine\./.test(prompt) && !prompt.includes("räumen"), prompt.split("\n").filter(l => /Schon/.test(l)));
-    check("Eman: schema = her fields (tr required, no def/perf)", JSON.stringify(Object.keys(schema.properties)) === JSON.stringify(["w", "g", "hint", "ar", "ex", "tr", "note", "fam", "cat"]) && JSON.stringify(schema.required) === JSON.stringify(["w", "g", "hint", "ar", "ex", "tr", "fam", "cat"]), schema);
+    check("Eman: one request for word or phrase: the prompt carries both rule sets, the schema the kind and the union of her fields (no def/perf)", prompt.includes('Eingabe: "umziehen"') && prompt.includes("Wenn kind w, Regeln:") && prompt.includes("Wenn kind p, Regeln:") && JSON.stringify(Object.keys(schema.properties)) === JSON.stringify(["kind", "w", "g", "hint", "ar", "ex", "tr", "note", "fam", "cat"]) && JSON.stringify(schema.required) === JSON.stringify(["kind", "w", "ar", "ex"]), schema);
     const formIds = await page.$$eval(".preview [id]", els => els.map(e => e.id));
     check("Eman: add form shows tr, hides def/perf", JSON.stringify(formIds) === JSON.stringify(["f_w", "f_g", "f_hint", "f_ar", "f_ex", "f_tr", "f_note", "f_cat", "f_fam"]), formIds);
     const trVal = await page.inputValue("#f_tr");
@@ -465,13 +497,13 @@ const toastOf = async (page, action) => {
     await grab(page, "list-after-save");
 
     // Arabic input that Gemini turns into a German word she already has -> "already in the list", no preview
-    gem.card = { w: "Fläche", g: "die", hint: "die Fläche, -n", ar: "مساحة", ex: "Die <b>Fläche</b> ist groß.", tr: "المساحة كبيرة.", note: "", fam: "fläche", cat: "الوصف والمقاسات" };
-    await page.fill("#nw", "مساحة"); await page.click('[data-act="gen"]');
+    gem.card = { kind: "w", w: "Fläche", g: "die", hint: "die Fläche, -n", ar: "مساحة", ex: "Die <b>Fläche</b> ist groß.", tr: "المساحة كبيرة.", note: "", fam: "fläche", cat: "الوصف والمقاسات" };
+    await page.click('[data-act="addopen"]'); await page.fill("#nw", "مساحة"); await page.click('[data-act="gen"]');
     await page.waitForFunction(() => { const m = document.querySelector(".addmsg"); return m && m.textContent; }, null, { timeout: 8000 });
     const dupMsg = await page.textContent(".addmsg"), dupPreview = !!(await page.$(".preview"));
     check("Eman: Arabic input translated to an existing German word is reported as duplicate", dupMsg === "الكلمة دي موجودة في القايمة خلاص." && !dupPreview, { dupMsg, dupPreview });
     const lastPrompt = gem.calls[gem.calls.length - 1].body.contents[0].parts[0].text;
-    check("Eman: prompt tells Gemini to translate Arabic/English input to German", lastPrompt.includes('Wort oder Ausdruck: "مساحة"') && lastPrompt.includes("Ist die Eingabe Arabisch oder Englisch"), lastPrompt.slice(0, 300));
+    check("Eman: prompt tells Gemini to translate Arabic/English input to German", lastPrompt.includes('Eingabe: "مساحة"') && lastPrompt.includes("Ist die Eingabe Arabisch oder Englisch"), lastPrompt.slice(0, 300));
     // Gemini unavailable -> waitlist
     gem.mode = "busy";
     await page.fill("#nw", "die Miete"); await page.click('[data-act="gen"]');
@@ -484,7 +516,7 @@ const toastOf = async (page, action) => {
     check("Eman: waitlist entry stored in progress.pending", pend && pend["miete"] && pend["miete"].w === "die Miete", pend);
     await page.click('[data-act="unq"]');
     check("Eman: waitlist chip can be removed", !(await page.$(".wait .chip")));
-    gem.mode = "ok";
+    gem.mode = "ok"; await page.click('[data-act="addclose"]');
 
     // Delete a card
     await page.click('[data-act="open"][data-id="umziehen"]');
@@ -552,8 +584,8 @@ const toastOf = async (page, action) => {
     const wordRows = await page.$$eval(".list li", els => els.length), seg = await page.$(".seg");
     check("Eman: the words tab has no words/phrases switch and lists the words without the phrase", !seg && wordRows === 54 && !(await page.$('[data-id="mirwirklichzuhoch"]')), { seg: !!seg, wordRows });
     await tab(page, "phrases");
-    const phView = await page.evaluate(() => ({ groups: [...document.querySelectorAll(".topic h3 span:first-child")].map(e => e.textContent), rows: document.querySelectorAll(".list li.ph").length, starter: !!document.querySelector('[data-act="pstart"]'), addPh: document.querySelector("#np").placeholder }));
-    check("Eman: phrases view shows the phrase in its Arabic group and offers the starter set", JSON.stringify(phView.groups) === '["إبداء الرأي"]' && phView.rows === 1 && phView.starter && phView.addPh === "بالألماني أو العربي أو الإنجليزي", phView);
+    const phView = await page.evaluate(() => ({ groups: [...document.querySelectorAll(".topic h3 span:first-child")].map(e => e.textContent), rows: document.querySelectorAll(".list li.ph").length, starter: !!document.querySelector('[data-act="pstart"]'), noInput: !document.querySelector("#np") }));
+    check("Eman: phrases view shows the phrase in its Arabic group and offers the starter set, no add form of its own", JSON.stringify(phView.groups) === '["إبداء الرأي"]' && phView.rows === 1 && phView.starter && phView.noInput, phView);
     await grab(page, "phrases-list");
     await page.screenshot({ path: SHOTS + "/light-10-phrases.png", fullPage: true });
     const starterToast = await toastOf(page, () => page.click('[data-act="pstart"]'));

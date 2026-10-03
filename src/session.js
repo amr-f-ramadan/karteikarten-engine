@@ -1,6 +1,7 @@
 // Lernsitzung: Warteschlange der fälligen und neuen Karten, Antworten, Umdrehen.
 import { today, shuffle } from "./core/text.js";
 import { dueCards, freshCards, recordAnswer } from "./core/leitner.js";
+import { pickFace } from "./core/newcard.js";
 import { $, calm } from "./ui/dom.js";
 
 export function createSession(ctx) {
@@ -9,15 +10,17 @@ export function createSession(ctx) {
   const due = () => dueCards(store.all, S.P);
   const fresh = () => freshCards(store.words, C.phrases ? store.phrases : null, S.P, today(), limits());
   function buildQueue() { L.queue = shuffle(due()).concat(fresh()); }
-  function next() { L.cur = L.queue.shift() || null; L.flipped = false; ctx.render(); }
+  /* Die nächste Karte nehmen und entscheiden, welche Seite sie zeigt: die Basis oder eine ihrer Wortformen */
+  function take() { L.cur = L.queue.shift() || null; L.face = L.cur ? pickFace(L.cur) : 0; L.flipped = false; }
+  function next() { take(); ctx.render(); }
   /* Keine Karte offen: Warteschlange neu aufbauen und die erste nehmen */
-  function ensureCur() { if (!L.cur) { buildQueue(); L.cur = L.queue.shift() || null; L.flipped = false; } }
+  function ensureCur() { if (!L.cur) { buildQueue(); take(); } }
   function restart() { buildQueue(); next(); }
   /* Neu gespeicherte Karten gleich lernen, soweit das Tageslimit reicht */
   function refill() {
     const inQ = new Set(L.queue.map(c => c.id).concat(L.cur ? [L.cur.id] : []));
     fresh().filter(c => !inQ.has(c.id)).forEach(c => L.queue.push(c));
-    if (!L.cur) { L.cur = L.queue.shift() || null; L.flipped = false; }
+    if (!L.cur) take();
   }
   function answer(ok) {
     const c = L.cur;
@@ -41,7 +44,7 @@ export function createSession(ctx) {
   /* Karte aus der Sitzung nehmen (gelöscht) */
   function drop(id) {
     L.queue = L.queue.filter(x => x.id !== id);
-    if (L.cur && L.cur.id === id) { L.cur = L.queue.shift() || null; L.flipped = false; }
+    if (L.cur && L.cur.id === id) take();
   }
   /* Zahlen für eine Zeichnung: einmal berechnet, von Router und Lernansicht gelesen */
   const stats = { due: 0, fresh: 0 };
