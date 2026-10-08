@@ -37,6 +37,11 @@ export const synRow = (c, store, T, act) => {
     : `<button class="famchip de g-x dim" data-act="sayt" data-t="${esc(s)}">${esc(s)}</button>`; }).join("")}</div>` : "";
 };
 const POS = { n: "posN", v: "posV", adj: "posAdj", adv: "posAdv" };
-/* Wortformen der Karte als Zeilen mit Wortart; die gerade gelernte (face) ist hervorgehoben */
-export const formsRow = (c, face, T) => (c.forms && c.forms.length ? `<div class="forms"><span class="famh">${T("formsH")}</span>${c.forms.map((f, i) =>
-  `<button class="form de ${gClass(f)}${face === i + 1 ? " on" : ""}" data-act="sayt" data-t="${esc(fullWord(f))}"><span class="pos">${T(POS[f.pos] || "posN")}</span> ${ART[f.g] ? `<span class="art">${ART[f.g]}</span> ` : ""}${esc(f.w)}</button>`).join("")}</div>` : "");
+/* Bedeutung einer Wortform unter dem Wort: Arabisch, Englisch oder beides wie die Option "Bedeutung zeigen" (fehlt en, bleibt Arabisch) */
+const formMeaning = (f, mode) => {
+  const ar = `<span class="fm ar-m" lang="ar" dir="rtl">${esc(f.ar)}</span>`, en = f.en ? `<span class="fm en-m" lang="en" dir="ltr">${esc(f.en)}</span>` : "";
+  return `<span class="fms">${mode === "en" && en ? en : mode === "both" ? ar + en : ar}</span>`;
+};
+/* Wortformen der Karte als Zeilen mit Wortart, Wort und Bedeutung; die gerade gelernte (face) ist hervorgehoben */
+export const formsRow = (c, face, T, mode = "ar") => (c.forms && c.forms.length ? `<div class="forms"><span class="famh">${T("formsH")}</span>${c.forms.map((f, i) =>
+  `<button class="form de ${gClass(f)}${face === i + 1 ? " on" : ""}" data-act="sayt" data-t="${esc(fullWord(f))}"><span class="fw"><span class="pos">${T(POS[f.pos] || "posN")}</span> ${ART[f.g] ? `<span class="art">${ART[f.g]}</span> ` : ""}${esc(f.w)}</span>${f.ar ? formMeaning(f, mode) : ""}</button>`).join("")}</div>` : "");

@@ -30,7 +30,7 @@ export function createLearnView(ctx) {
       <div class="exrow"><p class="ex de">${c.ex}</p>${speakBtn("ex", T("sayEx"))}</div>
       ${trLine(c.tr)}
       ${noteBox(c.note)}
-      ${formsRow(c, L.face, T)}
+      ${formsRow(c, L.face, T, meaningMode(ctx))}
       ${synRow(c, store, T, "sayt")}
       ${famRow(store.relatives(c), T)}`;
     return `

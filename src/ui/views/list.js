@@ -17,7 +17,7 @@ export function createListView(ctx) {
       const open = S.list.open === c.id;
       topics.get(famTopic).push(`<li class="${gClass(c)}${sub ? " sub" : ""}${inFam ? " infam" : ""}" data-s="${esc(store.hay(c))}"><button class="row" data-act="open" data-id="${c.id}">
         ${wordHTML(c)}${dots(boxOf(S.P, c), T)}</button>
-        ${open ? `<div class="detail">${meaningLines(c, meaningMode(ctx))}${c.perf ? `<p class="perf de">${T("perfL")} <b>${esc(c.perf)}</b></p>` : ""}${exRow(c.ex, T("sayEx"))}${trLine(c.tr)}${formsRow(c, 0, T)}${synRow(c, store, T, "goto")}${famRow(store.relatives(c), T)}<div class="row2"><button class="btn" data-act="sayt" data-t="${esc(fullWord(c))}">${T("phSay")}</button><button class="btn again" data-act="del" data-id="${c.id}">${T("delCard")}</button></div></div>` : ""}</li>`);
+        ${open ? `<div class="detail">${meaningLines(c, meaningMode(ctx))}${c.perf ? `<p class="perf de">${T("perfL")} <b>${esc(c.perf)}</b></p>` : ""}${exRow(c.ex, T("sayEx"))}${trLine(c.tr)}${formsRow(c, 0, T, meaningMode(ctx))}${synRow(c, store, T, "goto")}${famRow(store.relatives(c), T)}<div class="row2"><button class="btn" data-act="sayt" data-t="${esc(fullWord(c))}">${T("phSay")}</button><button class="btn again" data-act="del" data-id="${c.id}">${T("delCard")}</button></div></div>` : ""}</li>`);
     });
     const words = store.words, closed = words.length > COLLAPSE_AT ? closedSet(S, "w", [...topics.keys()]) : null;
     const secs = [...topics.entries()].map(([t, rows]) => topicSection(t, rows, closed ? closed.has(t) : null)).join("");

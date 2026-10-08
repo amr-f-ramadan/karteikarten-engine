@@ -231,7 +231,7 @@ const toastOf = async (page, action) => {
     await page.selectOption("#mlang", "both"); await sleep(100);
     await tab(page, "list"); const listFillBefore = await page.$eval('#main [data-act="fillen"]', e => e.textContent).catch(() => null);
     await page.click('[data-act="open"][data-id="kuendigung"]'); await sleep(450);
-    const meaning = await page.evaluate(() => ({ ar: (document.querySelector(".detail .ar") || {}).textContent, en: (document.querySelector(".detail .en") || {}).textContent, syn: [...document.querySelectorAll(".detail .syn .famchip")].map(e => e.textContent), forms: [...document.querySelectorAll(".detail .form")].map(e => e.textContent.replace(/\s+/g, " ").trim()) }));
+    const meaning = await page.evaluate(() => ({ ar: (document.querySelector(".detail .ar") || {}).textContent, en: (document.querySelector(".detail .en") || {}).textContent, syn: [...document.querySelectorAll(".detail .syn .famchip")].map(e => e.textContent), forms: [...document.querySelectorAll(".detail .form .fw")].map(e => e.textContent.replace(/\s+/g, " ").trim()), formMeanings: [...document.querySelectorAll(".detail .form .fm")].map(e => e.textContent) }));
     await tab(page, "settings");
     const fillBtn = await page.$('[data-act="fillen"]'), fillText = fillBtn ? await fillBtn.textContent() : null;
     const card0 = gem.card;
@@ -252,7 +252,7 @@ const toastOf = async (page, action) => {
   check("Amr: the centred label 'Einstellungen' fits inside the lens", amrLabel.text === "Einstellungen" && amrLabel.width <= 84, amrLabel);
   const amrN = (amrCards.match(/^ \{/gm) || []).length, en = amrEnglish;
   check("Amr: the sheet shows the kind Gemini chose; a phrase gets the phrase fields and lands among the phrases, the sheet closes after saving", amrKindTag === "Wort" && amrPhrase.tag === "Wendung" && JSON.stringify(amrPhrase.ids) === JSON.stringify(["pf_w", "pf_ar", "pf_en", "pf_ex", "pf_note", "pf_cat"]) && amrPhrase.sheetOpen && amrPhrase.closed && !!amrPhrase.line && amrPhrase.line.includes('"k":"p"') && amrPhrase.line.includes('"en":"I want to stress that"'), { amrKindTag, amrPhrase });
-  check("Amr: with 'both' the opened card shows the Arabic and the English meaning, the synonym chip and the forms", en.meaning.ar === "إنهاء عقد، استقالة" && en.meaning.en === "notice, termination" && JSON.stringify(en.meaning.syn) === '["Entlassung"]' && JSON.stringify(en.meaning.forms) === '["Verb kündigen"]', en.meaning); // (the forms list is checked with a space between part of speech and word)
+  check("Amr: with 'both' the opened card shows the Arabic and the English meaning, the synonym chip and the forms with their meanings", en.meaning.ar === "إنهاء عقد، استقالة" && en.meaning.en === "notice, termination" && JSON.stringify(en.meaning.syn) === '["Entlassung"]' && JSON.stringify(en.meaning.forms) === '["Verb kündigen"]' && JSON.stringify(en.meaning.formMeanings) === '["يفسخ","to cancel"]', en.meaning); // with "both" each form shows its Arabic and English meaning // (the forms list is checked with a space between part of speech and word)
   // The old list: words lack en, syn and forms; phrases lack en; six families have more than one card. The fill asks words in
   // tens and phrases in twenties, writes the fields into every line and merges each family into its base card
   const amrAll = amrCards.split("\n").filter(l => l.startsWith(" {")).map(l => JSON.parse(l.replace(/,$/, ""))), amrWords = amrAll.filter(c => c.k !== "p"), amrPhr = amrAll.filter(c => c.k === "p");
